@@ -1,0 +1,11 @@
+{
+  "body": {
+    "audio": "UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=",
+    "language": "hi"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "httpMethod": "POST",
+  "path": "/voice/transcribe"
+}

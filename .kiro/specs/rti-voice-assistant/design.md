@@ -12,81 +12,72 @@ The architecture follows a microservices approach with clear separation between 
 
 ```mermaid
 graph TB
-    subgraph "Client Layer"
-        UI[Voice-First Web Interface]
+    subgraph "Client Layer - AWS Amplify"
+        UI[Next.js Voice-First Interface]
         SR[Screen Reader Support]
         KB[Keyboard Navigation]
     end
     
-    subgraph "API Gateway"
-        GW[FastAPI Gateway]
-        AUTH[Authentication]
-        RATE[Rate Limiting]
+    subgraph "API Layer - AWS"
+        APIGW[API Gateway REST/WebSocket]
+        AUTH[Cognito Authentication]
+        RATE[API Gateway Rate Limiting]
     end
     
-    subgraph "Core Services"
-        VS[Voice Service]
-        LS[Legal Service]
-        FS[Form Service]
-        SS[Session Service]
-        PS[Privacy Service]
+    subgraph "Compute Layer - AWS Lambda"
+        VS[Voice Service Lambda]
+        LS[Legal Service Lambda]
+        FS[Form Service Lambda]
+        SS[Session Service Lambda]
+        PS[Privacy Service Lambda]
     end
     
     subgraph "AI/ML Layer"
-        ASR[Speech Recognition]
-        TTS[Text-to-Speech]
-        NLP[Legal NLP]
-        LLM[Language Model]
+        INDIC[IndicWhisper Container]
+        POLLY[AWS Polly TTS]
+        GTTS[gTTS Fallback]
+        BEDROCK[Amazon Bedrock Claude]
     end
     
-    subgraph "Data Layer"
-        CACHE[Redis Cache]
-        TEMP[Temporary Storage]
-        LOGS[Audit Logs]
+    subgraph "Data Layer - AWS"
+        DDB[DynamoDB Sessions TTL=24h]
+        S3[S3 Document Storage Lifecycle=24h]
+        CW[CloudWatch Logs]
     end
     
-    subgraph "External Services"
-        WHISPER[Whisper/IndicWhisper]
-        CLOUD[Cloud TTS]
-        PDF[PDF Generator]
-    end
+    UI --> APIGW
+    SR --> APIGW
+    KB --> APIGW
     
-    UI --> GW
-    SR --> GW
-    KB --> GW
+    APIGW --> VS
+    APIGW --> LS
+    APIGW --> FS
+    APIGW --> SS
+    APIGW --> PS
     
-    GW --> VS
-    GW --> LS
-    GW --> FS
-    GW --> SS
-    GW --> PS
+    VS --> INDIC
+    VS --> POLLY
+    VS --> GTTS
+    LS --> BEDROCK
+    FS --> BEDROCK
+    FS --> S3
     
-    VS --> ASR
-    VS --> TTS
-    LS --> NLP
-    LS --> LLM
-    FS --> LLM
-    
-    ASR --> WHISPER
-    TTS --> CLOUD
-    
-    SS --> CACHE
-    PS --> TEMP
-    PS --> LOGS
-    
-    FS --> PDF
+    SS --> DDB
+    PS --> DDB
+    PS --> S3
+    PS --> CW
 ```
 
 ### Component Architecture
 
-The system is organized into distinct service layers:
+The system is organized into AWS-native serverless layers:
 
-1. **Client Layer**: Accessibility-focused web interface with comprehensive screen reader support
-2. **API Gateway**: Centralized request handling with authentication and rate limiting
-3. **Core Services**: Business logic microservices for voice, legal, form, session, and privacy management
-4. **AI/ML Layer**: Specialized components for speech processing and legal language understanding
-5. **Data Layer**: Temporary storage with automatic purging and audit logging
-6. **External Services**: Third-party integrations for speech processing and document generation
+1. **Client Layer**: Next.js application hosted on AWS Amplify with accessibility-first design
+2. **API Layer**: AWS API Gateway for REST/WebSocket endpoints with Cognito authentication
+3. **Compute Layer**: AWS Lambda functions for serverless business logic execution
+4. **AI/ML Layer**: IndicWhisper (containerized), AWS Polly, gTTS, and Amazon Bedrock
+5. **Data Layer**: DynamoDB for sessions, S3 for documents, CloudWatch for audit logs
+6. **Auto-Cleanup**: DynamoDB TTL and S3 lifecycle policies enforce 24-hour data retention
 
 ## Components and Interfaces
 
@@ -116,9 +107,11 @@ interface TranscriptionResult {
 ```
 
 **Implementation Details:**
-- Uses IndicWhisper models for Hindi and Kannada with 90%+ accuracy
+- Uses AI4Bharat IndicWhisper models for Hindi and Kannada with 90%+ accuracy
+- Deployed as Lambda container image (up to 10GB) for model packaging
+- Falls back to OpenAI Whisper for English transcription
 - Implements prompt-tuning techniques for improved Indian language performance
-- Supports real-time streaming for responsive interaction
+- Supports batch processing for audio files (Lambda 15-min timeout)
 - Includes noise reduction and audio preprocessing
 
 ### Legal Service
@@ -147,10 +140,11 @@ interface SimplifiedExplanation {
 ```
 
 **Implementation Details:**
-- Uses fine-tuned language models for legal text simplification
-- Maintains context-aware conversation flow
+- Uses Amazon Bedrock with Claude 3 Haiku for cost-effective legal text simplification
+- Implements prompt engineering for RTI Act 2005 compliance
+- Maintains context-aware conversation flow using DynamoDB session state
 - Provides step-by-step guidance aligned with RTI Act 2005
-- Supports multilingual legal concept explanation
+- Supports multilingual legal concept explanation with language-specific prompts
 
 ### Form Service
 
@@ -181,9 +175,11 @@ interface RTIForm {
 
 **Implementation Details:**
 - Implements RTI Act 2005 compliant form structure
-- Supports incremental form completion with validation
-- Generates submission-ready documents with proper formatting
-- Maintains form state across sessions
+- Supports incremental form completion with validation using Amazon Bedrock
+- Generates submission-ready PDF documents using ReportLab on Lambda
+- Stores generated documents in S3 with 24-hour lifecycle policy
+- Maintains form state in DynamoDB with automatic TTL cleanup
+- Uses Lambda layers for PDF generation libraries
 
 ### Session Service
 
@@ -214,10 +210,11 @@ interface Session {
 ```
 
 **Implementation Details:**
-- Uses Redis for high-performance session storage
-- Implements automatic cleanup after 24 hours
-- Supports session recovery across browser sessions
-- Maintains audit trail for privacy compliance
+- Uses DynamoDB with TTL (Time To Live) for automatic 24-hour session cleanup
+- Implements on-demand capacity mode for cost optimization during prototype phase
+- Supports session recovery across browser sessions using session tokens
+- Maintains audit trail in CloudWatch Logs for DPDPA compliance
+- Uses DynamoDB Streams for real-time session event processing
 
 ### Privacy Service
 
@@ -246,10 +243,12 @@ interface ConsentRecord {
 ```
 
 **Implementation Details:**
-- Implements end-to-end encryption for sensitive data
-- Maintains detailed consent records with withdrawal mechanisms
-- Enforces automatic data purging policies
-- Provides transparency through privacy reports
+- Implements end-to-end encryption using AWS KMS for sensitive data
+- Stores consent records in DynamoDB with encryption at rest
+- Enforces automatic data purging using DynamoDB TTL and S3 lifecycle policies
+- Uses S3 server-side encryption (SSE-S3) for document storage
+- Provides transparency through privacy reports generated from CloudWatch Logs
+- Implements AWS IAM policies for least-privilege access control
 
 ## Data Models
 
@@ -329,22 +328,27 @@ interface VoiceSettings {
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant V as Voice Service
-    participant L as Legal Service
-    participant F as Form Service
-    participant S as Session Service
-    participant P as Privacy Service
+    participant APIGW as API Gateway
+    participant VL as Voice Lambda
+    participant LL as Legal Lambda
+    participant FL as Form Lambda
+    participant DDB as DynamoDB
+    participant S3 as S3
+    participant BR as Bedrock
+    participant IW as IndicWhisper
     
-    U->>V: Speak in Hindi/Kannada/English
-    V->>V: Transcribe using IndicWhisper
-    V->>L: Process legal query
-    L->>L: Simplify legal language
-    L->>F: Update form fields
-    F->>F: Validate input
-    F->>S: Auto-save progress
-    S->>P: Log data processing
-    P->>P: Enforce retention policy
-    V->>U: Respond in same language
+    U->>APIGW: Speak in Hindi/Kannada/English
+    APIGW->>VL: Audio upload
+    VL->>IW: Transcribe using IndicWhisper
+    IW->>VL: Return transcription
+    VL->>LL: Process legal query
+    LL->>BR: Simplify legal language
+    BR->>LL: Simplified response
+    LL->>FL: Update form fields
+    FL->>DDB: Auto-save session (TTL=24h)
+    FL->>BR: Validate input
+    FL->>S3: Store draft (lifecycle=24h)
+    VL->>U: Respond via Polly TTS
 ```
 
 ## Correctness Properties

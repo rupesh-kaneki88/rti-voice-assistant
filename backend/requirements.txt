@@ -1,5 +1,5 @@
 # RTI Voice Assistant - Backend Requirements
-# Single requirements file for simplified development
+# Fully functional prototype with AWS services
 
 # Web Framework
 fastapi==0.104.1
@@ -7,25 +7,23 @@ uvicorn[standard]==0.24.0
 
 # Data Validation
 pydantic==2.5.0
+pydantic-settings==2.1.0
 
-# AWS SDK (for production deployment)
+# AWS SDK
 boto3==1.34.0
+botocore==1.34.0
 
 # Environment Variables
 python-dotenv==1.0.0
 
-# HTTP Requests (for testing)
+# HTTP Requests
 requests==2.31.0
 
-# Optional: Add these when ready for production features
-# AWS Polly/Bedrock integration
-# aioboto3==12.1.0
-
 # PDF Generation
-# reportlab==4.0.7
+reportlab==4.0.7
 
-# ML Dependencies (add later when deploying voice service)
-# torch==2.1.2
-# transformers==4.36.0
-# librosa==0.10.0
-# soundfile==0.12.1
+# Audio processing
+pydub==0.25.1
+
+# For handling audio files
+python-multipart==0.0.6

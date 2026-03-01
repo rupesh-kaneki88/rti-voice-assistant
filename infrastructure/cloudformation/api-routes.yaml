@@ -1,0 +1,249 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RTI Voice Assistant - API Gateway Routes and Integrations'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  
+  HttpApiId:
+    Type: String
+    Description: HTTP API ID from main stack
+  
+  VoiceServiceLambdaArn:
+    Type: String
+    Description: Voice Service Lambda ARN
+    Default: ''
+  
+  SessionServiceLambdaArn:
+    Type: String
+    Description: Session Service Lambda ARN
+    Default: ''
+  
+  FormServiceLambdaArn:
+    Type: String
+    Description: Form Service Lambda ARN
+    Default: ''
+  
+  LegalServiceLambdaArn:
+    Type: String
+    Description: Legal Service Lambda ARN
+    Default: ''
+
+Conditions:
+  HasVoiceService: !Not [!Equals [!Ref VoiceServiceLambdaArn, '']]
+  HasSessionService: !Not [!Equals [!Ref SessionServiceLambdaArn, '']]
+  HasFormService: !Not [!Equals [!Ref FormServiceLambdaArn, '']]
+  HasLegalService: !Not [!Equals [!Ref LegalServiceLambdaArn, '']]
+
+Resources:
+  # Voice Service Routes
+  VoiceTranscribeIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: HasVoiceService
+    Properties:
+      ApiId: !Ref HttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Ref VoiceServiceLambdaArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  VoiceTranscribeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasVoiceService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /voice/transcribe'
+      Target: !Sub 'integrations/${VoiceTranscribeIntegration}'
+
+  VoiceSynthesizeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasVoiceService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /voice/synthesize'
+      Target: !Sub 'integrations/${VoiceTranscribeIntegration}'
+
+  # Catch-all route for voice service (use {proxy+} instead of *)
+  VoiceCatchAllRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasVoiceService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'ANY /voice/{proxy+}'
+      Target: !Sub 'integrations/${VoiceTranscribeIntegration}'
+
+  # Session Service Routes
+  SessionIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: HasSessionService
+    Properties:
+      ApiId: !Ref HttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Ref SessionServiceLambdaArn
+      PayloadFormatVersion: '2.0'
+
+  SessionCreateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasSessionService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /session/create'
+      Target: !Sub 'integrations/${SessionIntegration}'
+
+  SessionGetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasSessionService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'GET /session/{sessionId}'
+      Target: !Sub 'integrations/${SessionIntegration}'
+
+  SessionUpdateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasSessionService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'PUT /session/{sessionId}'
+      Target: !Sub 'integrations/${SessionIntegration}'
+
+  SessionCatchAllRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasSessionService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'ANY /session/{proxy+}'
+      Target: !Sub 'integrations/${SessionIntegration}'
+
+  # Form Service Routes
+  FormIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: HasFormService
+    Properties:
+      ApiId: !Ref HttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Ref FormServiceLambdaArn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  FormUpdateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasFormService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /form/update'
+      Target: !Sub 'integrations/${FormIntegration}'
+
+  FormGenerateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasFormService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /form/generate'
+      Target: !Sub 'integrations/${FormIntegration}'
+
+  FormCatchAllRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasFormService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'ANY /form/{proxy+}'
+      Target: !Sub 'integrations/${FormIntegration}'
+
+  # Legal Service Routes
+  LegalIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: HasLegalService
+    Properties:
+      ApiId: !Ref HttpApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Ref LegalServiceLambdaArn
+      PayloadFormatVersion: '2.0'
+
+  LegalGuidanceRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasLegalService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'POST /legal/guidance'
+      Target: !Sub 'integrations/${LegalIntegration}'
+
+  LegalRTIRightsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasLegalService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'GET /legal/rti-rights'
+      Target: !Sub 'integrations/${LegalIntegration}'
+
+  LegalCatchAllRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: HasLegalService
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'ANY /legal/{proxy+}'
+      Target: !Sub 'integrations/${LegalIntegration}'
+
+  # Health Check Route (no Lambda needed)
+  HealthCheckIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApiId
+      IntegrationType: MOCK
+      PayloadFormatVersion: '1.0'
+      RequestTemplates:
+        application/json: '{"statusCode": 200}'
+      TemplateSelectionExpression: '200'
+      ResponseParameters:
+        200:
+          ResponseTemplates:
+            application/json: '{"status": "healthy", "timestamp": "$context.requestTime"}'
+
+  HealthCheckRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApiId
+      RouteKey: 'GET /health'
+      Target: !Sub 'integrations/${HealthCheckIntegration}'
+
+  # Lambda Permissions for API Gateway
+  VoiceServiceInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasVoiceService
+    Properties:
+      FunctionName: !Ref VoiceServiceLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+
+  SessionServiceInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasSessionService
+    Properties:
+      FunctionName: !Ref SessionServiceLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+
+  FormServiceInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasFormService
+    Properties:
+      FunctionName: !Ref FormServiceLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+
+  LegalServiceInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasLegalService
+    Properties:
+      FunctionName: !Ref LegalServiceLambdaArn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApiId}/*'
+
+Outputs:
+  ApiRoutesConfigured:
+    Description: API Routes Configuration Status
+    Value: 'Routes configured successfully'

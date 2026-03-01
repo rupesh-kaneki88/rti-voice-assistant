@@ -22,6 +22,11 @@ echo "ECR Repository: $ECR_REPOSITORY"
 echo "Image Tag: $IMAGE_TAG"
 echo "========================================="
 
+# Copy shared modules into build context
+echo "Copying shared modules..."
+rm -rf shared
+cp -r ../shared ./shared
+
 # Create ECR repository if it doesn't exist
 echo "Creating ECR repository..."
 aws ecr describe-repositories --repository-names $ECR_REPOSITORY --region $AWS_REGION 2>/dev/null || \

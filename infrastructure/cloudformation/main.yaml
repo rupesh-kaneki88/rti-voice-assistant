@@ -246,29 +246,43 @@ Resources:
       LogGroupName: !Sub '/aws/rti-voice-assistant/${Environment}'
       RetentionInDays: 30
 
-  # API Gateway REST API
-  RestApi:
-    Type: AWS::ApiGateway::RestApi
+  # API Gateway HTTP API (cheaper and faster than REST API)
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
     Properties:
       Name: !Sub 'rti-voice-assistant-api-${Environment}'
-      Description: REST API for RTI Voice Assistant
-      EndpointConfiguration:
-        Types:
-          - REGIONAL
+      Description: HTTP API for RTI Voice Assistant
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - '*'
+        MaxAge: 300
       Tags:
-        - Key: Environment
-          Value: !Ref Environment
-        - Key: Application
-          Value: RTI-Voice-Assistant
+        Environment: !Ref Environment
+        Application: RTI-Voice-Assistant
 
-  # API Gateway Deployment (placeholder)
-  ApiDeployment:
-    Type: AWS::ApiGateway::Deployment
-    DependsOn:
-      - RestApi
+  # API Gateway Stage
+  HttpApiStage:
+    Type: AWS::ApiGatewayV2::Stage
     Properties:
-      RestApiId: !Ref RestApi
+      ApiId: !Ref HttpApi
       StageName: !Ref Environment
+      AutoDeploy: true
+      Description: !Sub '${Environment} stage for RTI Voice Assistant'
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 100
+        ThrottlingRateLimit: 50
+      Tags:
+        Environment: !Ref Environment
+        Application: RTI-Voice-Assistant
 
 Outputs:
   SessionsTableName:
@@ -307,14 +321,20 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-EncryptionKey'
 
-  RestApiId:
-    Description: API Gateway REST API ID
-    Value: !Ref RestApi
+  HttpApiId:
+    Description: API Gateway HTTP API ID
+    Value: !Ref HttpApi
     Export:
-      Name: !Sub '${AWS::StackName}-RestApiId'
+      Name: !Sub '${AWS::StackName}-HttpApiId'
 
-  RestApiUrl:
-    Description: API Gateway REST API URL
-    Value: !Sub 'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
+  HttpApiUrl:
+    Description: API Gateway HTTP API URL
+    Value: !Sub 'https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}'
     Export:
-      Name: !Sub '${AWS::StackName}-RestApiUrl'
+      Name: !Sub '${AWS::StackName}-HttpApiUrl'
+  
+  HttpApiEndpoint:
+    Description: API Gateway HTTP API Endpoint
+    Value: !GetAtt HttpApi.ApiEndpoint
+    Export:
+      Name: !Sub '${AWS::StackName}-HttpApiEndpoint'

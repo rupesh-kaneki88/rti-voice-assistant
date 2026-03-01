@@ -51,15 +51,39 @@ Transcription Result
 
 ## Deployment
 
-### Prerequisites
+### Option 1: Simple Deployment (Recommended for Testing)
 
-1. Docker installed
+Use this for infrastructure testing without ML dependencies. Returns mock transcriptions.
+
+**ZIP Deployment (No Docker required):**
+```bash
+chmod +x deploy-simple.sh
+./deploy-simple.sh
+```
+
+**Docker Deployment:**
+```bash
+chmod +x deploy-simple-docker.sh
+./deploy-simple-docker.sh latest
+```
+
+**Features:**
+- No ML dependencies (fast build)
+- Mock transcriptions in English, Hindi, Kannada
+- 512MB memory, 30s timeout
+- Perfect for testing API Gateway integration
+
+### Option 2: Full Deployment with IndicWhisper
+
+Use this for production with real speech-to-text capabilities.
+
+**Prerequisites:**
+1. Docker Desktop running
 2. AWS CLI configured
 3. ECR repository access
 4. Lambda execution role created
 
-### Deploy
-
+**Deploy:**
 ```bash
 chmod +x deploy.sh
 ./deploy.sh latest
@@ -70,6 +94,10 @@ This will:
 2. Push to Amazon ECR
 3. Create/update Lambda function
 4. Configure timeout (15 min) and memory (10GB)
+
+**Known Issues:**
+- GCC version mismatch (Lambda has 7.3, needs 9.3+ for some packages)
+- Consider using pre-built wheels or custom base image with newer GCC
 
 ### Local Testing
 

@@ -2,7 +2,6 @@
 AWS Polly service for text-to-speech
 """
 import logging
-from typing import bytes
 import sys
 import os
 

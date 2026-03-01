@@ -3,7 +3,6 @@ Amazon Bedrock service for legal guidance and simplification
 """
 import json
 import logging
-from typing import str
 import sys
 import os
 

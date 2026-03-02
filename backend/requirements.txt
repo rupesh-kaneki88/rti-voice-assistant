@@ -27,3 +27,6 @@ pydub==0.25.1
 
 # For handling audio files
 python-multipart==0.0.6
+
+# gTTS for Kannada support
+gTTS==2.5.0

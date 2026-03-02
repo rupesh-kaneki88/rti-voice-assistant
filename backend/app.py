@@ -24,6 +24,8 @@ from shared.aws_clients import get_sessions_table
 from services.bedrock_service import BedrockService
 from services.polly_service import PollyService
 from services.transcribe_service import TranscribeService
+from services.pdf_service import PDFService
+from services.rti_agent_service import RTIAgentService
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -48,6 +50,8 @@ app.add_middleware(
 bedrock_service = None
 polly_service = None
 transcribe_service = None
+pdf_service = None
+rti_agent_service = None
 
 # In-memory fallback storage
 sessions_memory = {}
@@ -56,7 +60,7 @@ sessions_memory = {}
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global bedrock_service, polly_service, transcribe_service
+    global bedrock_service, polly_service, transcribe_service, pdf_service, rti_agent_service
     
     try:
         if not settings.use_mock_services:
@@ -64,12 +68,16 @@ async def startup_event():
             bedrock_service = BedrockService()
             polly_service = PollyService()
             transcribe_service = TranscribeService()
+            pdf_service = PDFService()
+            rti_agent_service = RTIAgentService()
             logger.info("✓ AWS services initialized")
         else:
             logger.info("Using mock services (USE_MOCK_SERVICES=true)")
+            pdf_service = PDFService()  # PDF service doesn't need AWS
     except Exception as e:
         logger.warning(f"Could not initialize AWS services: {e}")
         logger.info("Falling back to mock services")
+        pdf_service = PDFService()  # Always initialize PDF service
 
 
 # ============================================================================
@@ -107,6 +115,11 @@ class SessionResponse(BaseModel):
 class FormUpdate(BaseModel):
     field: str
     value: str
+
+
+class ConversationRequest(BaseModel):
+    message: str
+    language: str = "en"
 
 
 # ============================================================================
@@ -193,7 +206,10 @@ async def health():
 @app.post("/voice/transcribe", response_model=TranscribeResponse)
 async def transcribe_audio(request: TranscribeRequest):
     """
-    Transcribe audio to text using AWS Transcribe
+    Transcribe audio to text
+    
+    Note: Using mock transcription for speed. AWS Transcribe takes 30-60 seconds.
+    For production, integrate real-time transcription service.
     """
     try:
         logger.info(f"Transcription request: language={request.language}")
@@ -215,40 +231,95 @@ async def transcribe_audio(request: TranscribeRequest):
                 detail="Invalid audio encoding. Must be base64."
             )
         
-        # Use AWS Transcribe if available
-        if transcribe_service and not settings.use_mock_services:
-            try:
-                text, confidence, language = transcribe_service.transcribe_audio(
-                    audio_bytes, request.language
-                )
-                return TranscribeResponse(
-                    text=text,
-                    confidence=confidence,
-                    language=language,
-                    mode="aws_transcribe"
-                )
-            except Exception as e:
-                logger.error(f"AWS Transcribe error: {e}")
-                logger.info("Falling back to mock transcription")
-        
-        # Mock transcriptions (fallback)
+        # For hackathon: Use mock transcriptions (AWS Transcribe is too slow - 30-60s)
+        # In production, use real-time transcription service or IndicWhisper
         mock_transcriptions = {
-            'en': 'I want to file an RTI application',
-            'hi': 'मैं आरटीआई आवेदन दाखिल करना चाहता हूं',
-            'kn': 'ನಾನು ಆರ್‌ಟಿಐ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಬಯಸುತ್ತೇನೆ'
+            'en': 'I want to file an RTI application to know about government spending on education',
+            'hi': 'मैं शिक्षा पर सरकारी खर्च के बारे में जानने के लिए आरटीआई आवेदन दाखिल करना चाहता हूं',
+            'kn': 'ನಾನು ಶಿಕ್ಷಣದ ಮೇಲೆ ಸರ್ಕಾರದ ಖರ್ಚಿನ ಬಗ್ಗೆ ತಿಳಿಯಲು ಆರ್‌ಟಿಐ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಬಯಸುತ್ತೇನೆ'
         }
         
         return TranscribeResponse(
             text=mock_transcriptions[request.language],
             confidence=0.95,
             language=request.language,
-            mode="mock"
+            mode="mock_fast"
         )
     
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Transcription error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/voice/extract-form-data")
+async def extract_form_data(text: str, language: str = "en"):
+    """
+    Extract RTI form fields from transcribed text using Bedrock
+    """
+    try:
+        if bedrock_service and not settings.use_mock_services:
+            try:
+                # Use Bedrock to extract structured data
+                prompt = f"""Extract RTI application information from this text: "{text}"
+
+Extract and return ONLY a JSON object with these fields (use null if not mentioned):
+- information_sought: What information is being requested
+- department: Which government department
+- reason: Why they need this information
+
+Return ONLY valid JSON, no other text."""
+
+                import json as json_lib
+                body = json_lib.dumps({
+                    "anthropic_version": "bedrock-2023-05-31",
+                    "max_tokens": 500,
+                    "temperature": 0.3,
+                    "messages": [{"role": "user", "content": prompt}]
+                })
+                
+                response = bedrock_service.bedrock_client.invoke_model(
+                    modelId=settings.bedrock_model_id,
+                    body=body
+                )
+                
+                response_body = json_lib.loads(response['body'].read())
+                extracted_text = response_body['content'][0]['text']
+                
+                # Parse JSON from response
+                try:
+                    extracted_data = json_lib.loads(extracted_text)
+                except:
+                    # If Bedrock returns text with JSON, extract it
+                    import re
+                    json_match = re.search(r'\{.*\}', extracted_text, re.DOTALL)
+                    if json_match:
+                        extracted_data = json_lib.loads(json_match.group())
+                    else:
+                        extracted_data = {}
+                
+                return {
+                    "extracted_data": extracted_data,
+                    "mode": "bedrock"
+                }
+            except Exception as e:
+                logger.error(f"Bedrock extraction error: {e}")
+        
+        # Fallback: Simple keyword extraction
+        extracted_data = {
+            "information_sought": text,
+            "department": "Ministry of Education" if "education" in text.lower() or "शिक्षा" in text else None,
+            "reason": "For personal information" if language == "en" else "व्यक्तिगत जानकारी के लिए"
+        }
+        
+        return {
+            "extracted_data": extracted_data,
+            "mode": "simple"
+        }
+    
+    except Exception as e:
+        logger.error(f"Extraction error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -313,7 +384,8 @@ async def create_session(request: SessionCreate):
             "session_id": session_id,
             "language": request.language,
             "created_at": datetime.utcnow().isoformat(),
-            "form_data": {}
+            "form_data": {},
+            "conversation_history": []
         }
         
         save_session_to_db(session_data)
@@ -362,6 +434,104 @@ async def delete_session(session_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/session/{session_id}/conversation")
+async def have_conversation(session_id: str, request: ConversationRequest):
+    """
+    Have a conversation with the RTI agent
+    This is the main endpoint for conversational interaction
+    """
+    session_data = get_session_from_db(session_id)
+    
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    try:
+        # Get conversation history
+        conversation_history = session_data.get('conversation_history', [])
+        form_data = session_data.get('form_data', {})
+        
+        # If this is the first message, send greeting
+        if not conversation_history:
+            if rti_agent_service and not settings.use_mock_services:
+                greeting = rti_agent_service.get_initial_greeting(request.language)
+            else:
+                greetings = {
+                    'en': "Hello! I'm your RTI assistant. I'll help you file a Right to Information application. What information would you like to request from the government?",
+                    'hi': "नमस्ते! मैं आपका आरटीआई सहायक हूं। मैं आपको सूचना का अधिकार आवेदन दाखिल करने में मदद करूंगा। आप सरकार से कौन सी जानकारी चाहते हैं?",
+                    'kn': "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಆರ್‌ಟಿಐ ಸಹಾಯಕ. ನಾನು ನಿಮಗೆ ಮಾಹಿತಿ ಹಕ್ಕು ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ. ನೀವು ಸರ್ಕಾರದಿಂದ ಯಾವ ಮಾಹಿತಿಯನ್ನು ವಿನಂತಿಸಲು ಬಯಸುತ್ತೀರಿ?"
+                }
+                greeting = greetings.get(request.language, greetings['en'])
+            
+            # Add greeting to history
+            conversation_history.append({
+                "role": "assistant",
+                "content": greeting
+            })
+            
+            session_data['conversation_history'] = conversation_history
+            save_session_to_db(session_data)
+            
+            return {
+                "agent_response": greeting,
+                "form_updates": {},
+                "is_complete": False,
+                "conversation_history": conversation_history
+            }
+        
+        # Add user message to history
+        conversation_history.append({
+            "role": "user",
+            "content": request.message
+        })
+        
+        # Get agent response
+        if rti_agent_service and not settings.use_mock_services:
+            response = rti_agent_service.get_agent_response(
+                user_message=request.message,
+                conversation_history=conversation_history,
+                form_data=form_data,
+                language=request.language
+            )
+            
+            agent_message = response['agent_response']
+            form_updates = response['form_updates']
+            is_complete = response['is_complete']
+        else:
+            # Simple mock conversation
+            agent_message = f"I heard you say: {request.message}. Let me help you with that."
+            form_updates = {}
+            is_complete = False
+        
+        # Update form data with extracted information
+        if form_updates:
+            for field, value in form_updates.items():
+                form_data[field] = value
+            session_data['form_data'] = form_data
+        
+        # Add agent response to history
+        conversation_history.append({
+            "role": "assistant",
+            "content": agent_message
+        })
+        
+        # Save updated session
+        session_data['conversation_history'] = conversation_history
+        save_session_to_db(session_data)
+        
+        logger.info(f"Conversation turn completed for session {session_id}")
+        
+        return {
+            "agent_response": agent_message,
+            "form_updates": form_updates,
+            "is_complete": is_complete,
+            "conversation_history": conversation_history[-6:]  # Last 3 exchanges
+        }
+    
+    except Exception as e:
+        logger.error(f"Conversation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================================================
 # RTI Form Endpoints
 # ============================================================================
@@ -403,7 +573,7 @@ async def get_form(session_id: str):
 
 @app.post("/form/{session_id}/generate")
 async def generate_document(session_id: str):
-    """Generate RTI document"""
+    """Generate RTI document PDF"""
     session_data = get_session_from_db(session_id)
     
     if not session_data:
@@ -411,20 +581,78 @@ async def generate_document(session_id: str):
     
     form_data = session_data["form_data"]
     
-    # TODO: Generate actual PDF using reportlab
-    document = {
-        "session_id": session_id,
-        "document_type": "RTI Application",
-        "format": "pdf",
-        "content": form_data,
-        "generated_at": datetime.utcnow().isoformat(),
-        "download_url": f"/form/{session_id}/download",
-        "message": "Document generation - PDF generation coming soon"
-    }
+    # Validate required fields
+    required_fields = ['applicant_name', 'address', 'information_sought']
+    missing_fields = [field for field in required_fields if not form_data.get(field)]
     
-    logger.info(f"Generated document for session: {session_id}")
+    if missing_fields:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required fields: {', '.join(missing_fields)}"
+        )
     
-    return document
+    try:
+        # Generate PDF
+        if pdf_service:
+            pdf_bytes = pdf_service.generate_rti_pdf(form_data, session_id)
+            
+            # Save to S3 if available
+            if not settings.use_mock_services:
+                try:
+                    s3_client = AWSClients.get_s3()
+                    if s3_client:
+                        pdf_key = f"documents/{session_id}/rti-application.pdf"
+                        s3_client.put_object(
+                            Bucket=settings.s3_documents_bucket,
+                            Key=pdf_key,
+                            Body=pdf_bytes,
+                            ContentType='application/pdf'
+                        )
+                        
+                        # Generate presigned URL (valid for 1 hour)
+                        download_url = s3_client.generate_presigned_url(
+                            'get_object',
+                            Params={
+                                'Bucket': settings.s3_documents_bucket,
+                                'Key': pdf_key
+                            },
+                            ExpiresIn=3600
+                        )
+                        
+                        logger.info(f"PDF saved to S3: {pdf_key}")
+                    else:
+                        download_url = f"/form/{session_id}/download"
+                except Exception as e:
+                    logger.error(f"S3 upload error: {e}")
+                    download_url = f"/form/{session_id}/download"
+            else:
+                download_url = f"/form/{session_id}/download"
+            
+            # Store PDF in session for download
+            session_data['pdf_bytes'] = pdf_bytes
+            save_session_to_db(session_data)
+            
+            document = {
+                "session_id": session_id,
+                "document_type": "RTI Application",
+                "format": "pdf",
+                "size_bytes": len(pdf_bytes),
+                "generated_at": datetime.utcnow().isoformat(),
+                "download_url": download_url,
+                "message": "RTI application PDF generated successfully"
+            }
+            
+            logger.info(f"Generated PDF for session: {session_id}, size: {len(pdf_bytes)} bytes")
+            
+            return document
+        else:
+            raise HTTPException(status_code=500, detail="PDF service not available")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Document generation error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

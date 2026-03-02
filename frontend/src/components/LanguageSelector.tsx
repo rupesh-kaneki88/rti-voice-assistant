@@ -13,29 +13,30 @@ export default function LanguageSelector({ currentLanguage, onLanguageChange }: 
   ];
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-4">
-      <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 mb-2">
-        Select Language / भाषा चुनें / ಭಾಷೆ ಆಯ್ಕೆಮಾಡಿ
+    <div className="card p-4">
+      <label htmlFor="language-select" className="block text-sm font-bold text-neutral-700 mb-3 text-center">
+        Select Your Language
       </label>
       
-      <div className="flex gap-2 flex-wrap">
+      <div id="language-select" className="grid grid-cols-3 gap-2">
         {languages.map((lang) => (
           <button
             key={lang.code}
             onClick={() => onLanguageChange(lang.code)}
             className={`
-              px-6 py-3 rounded-lg font-medium transition-all duration-200
+              p-3 rounded-lg font-semibold text-center
+              transition-all duration-200 transform
               focus:outline-none focus:ring-4 focus:ring-offset-2
               ${currentLanguage === lang.code
-                ? 'bg-blue-600 text-white focus:ring-blue-500'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-400'
+                ? 'bg-brand-blue text-white shadow-lg scale-105 focus:ring-brand-blue-light'
+                : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200 focus:ring-neutral-400'
               }
             `}
             aria-pressed={currentLanguage === lang.code}
-            aria-label={`Select ${lang.name} language`}
+            aria-label={`Select ${lang.name}`}
           >
-            <span className="block text-sm">{lang.name}</span>
-            <span className="block text-lg">{lang.native}</span>
+            <span className="block text-xs md:text-sm">{lang.name}</span>
+            <span className="block text-md md:text-lg">{lang.native}</span>
           </button>
         ))}
       </div>

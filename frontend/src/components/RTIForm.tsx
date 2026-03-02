@@ -3,6 +3,19 @@
 import { useState, useEffect } from 'react';
 import { updateForm, getForm, generateDocument, getRTIGuidance } from '@/lib/api';
 
+// SVG Icon Components
+const InfoIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+  </svg>
+);
+
+const ChevronIcon = ({ open }: { open: boolean }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 transform transition-transform ${open ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor">
+    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+  </svg>
+);
+
 interface RTIFormProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
@@ -46,153 +59,105 @@ export default function RTIForm({ sessionId, language }: RTIFormProps) {
     }
   };
 
-  const handleFieldChange = async (field: string, value: string) => {
+  const handleFieldChange = async (field: keyof FormData, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
     try {
       setError(null);
       await updateForm(sessionId, field, value);
-      setFormData(prev => ({ ...prev, [field]: value }));
     } catch (err) {
-      setError('Failed to update form. Please try again.');
+      setError('Failed to save progress. Please check your connection.');
       console.error('Update error:', err);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       setIsLoading(true);
       setError(null);
-      
       const result = await generateDocument(sessionId);
-      
-      alert('RTI Application generated successfully! Check the console for details.');
+      alert('RTI Application generated successfully! Check your downloads or the console.');
       console.log('Generated document:', result);
     } catch (err) {
-      setError('Failed to generate document. Please try again.');
+      setError('Failed to generate document. Please ensure all fields are filled correctly.');
       console.error('Generation error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const formFields: { id: keyof FormData; label: string; type: 'text' | 'textarea'; required: boolean; placeholder: string }[] = [
+    { id: 'applicant_name', label: 'Your Full Name', type: 'text', required: true, placeholder: 'e.g., John Doe' },
+    { id: 'address', label: 'Your Full Address', type: 'textarea', required: true, placeholder: 'e.g., 123 Main St, Anytown, India' },
+    { id: 'department', label: 'Target Government Department', type: 'text', required: true, placeholder: 'e.g., Ministry of Health and Family Welfare' },
+    { id: 'information_sought', label: 'Information You Are Seeking', type: 'textarea', required: true, placeholder: 'Clearly describe the information you need...' },
+    { id: 'reason', label: 'Reason for Seeking Information (Optional)', type: 'textarea', required: false, placeholder: 'e.g., For public interest, personal matter, etc.' },
+  ];
+
   return (
     <div className="space-y-6">
       {/* RTI Guidance */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-neutral-100 border border-neutral-200 rounded-lg">
         <button
           onClick={() => setShowGuidance(!showGuidance)}
-          className="w-full text-left font-semibold text-blue-900 flex justify-between items-center"
+          className="w-full p-4 text-left font-semibold text-brand-blue flex justify-between items-center"
           aria-expanded={showGuidance}
         >
-          <span>ℹ️ What is RTI?</span>
-          <span>{showGuidance ? '▼' : '▶'}</span>
+          <span className="flex items-center gap-2">
+            <InfoIcon />
+            What is the RTI Act?
+          </span>
+          <ChevronIcon open={showGuidance} />
         </button>
-        
         {showGuidance && guidance && (
-          <div className="mt-3 text-gray-700 whitespace-pre-wrap">
+          <div className="p-4 border-t border-neutral-200 text-neutral-700 whitespace-pre-wrap">
             {guidance}
           </div>
         )}
       </div>
 
-      {/* Error Message */}
       {error && (
-        <div role="alert" className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
-          <p>{error}</p>
+        <div role="alert" className="bg-red-100 border-l-4 border-red-500 text-red-800 p-4 rounded-md font-semibold">
+          {error}
         </div>
       )}
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Applicant Name */}
-        <div>
-          <label htmlFor="applicant_name" className="block text-sm font-medium text-gray-700 mb-1">
-            Your Name *
-          </label>
-          <input
-            type="text"
-            id="applicant_name"
-            value={formData.applicant_name || ''}
-            onChange={(e) => handleFieldChange('applicant_name', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-            aria-required="true"
-          />
-        </div>
+      <form onSubmit={handleSubmit} className="space-y-5">
+        {formFields.map(field => (
+          <div key={field.id}>
+            <label htmlFor={field.id} className="block text-sm font-bold text-neutral-700 mb-1">
+              {field.label} {field.required && <span className="text-red-500">*</span>}
+            </label>
+            {field.type === 'textarea' ? (
+              <textarea
+                id={field.id}
+                value={formData[field.id] || ''}
+                onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                rows={field.id === 'information_sought' ? 4 : 2}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md shadow-sm focus:ring-brand-orange focus:border-brand-orange"
+                required={field.required}
+                placeholder={field.placeholder}
+              />
+            ) : (
+              <input
+                type="text"
+                id={field.id}
+                value={formData[field.id] || ''}
+                onChange={(e) => handleFieldChange(field.id, e.target.value)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded-md shadow-sm focus:ring-brand-orange focus:border-brand-orange"
+                required={field.required}
+                placeholder={field.placeholder}
+              />
+            )}
+          </div>
+        ))}
 
-        {/* Address */}
-        <div>
-          <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-            Address *
-          </label>
-          <textarea
-            id="address"
-            value={formData.address || ''}
-            onChange={(e) => handleFieldChange('address', e.target.value)}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-            aria-required="true"
-          />
-        </div>
-
-        {/* Department */}
-        <div>
-          <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
-            Government Department *
-          </label>
-          <input
-            type="text"
-            id="department"
-            value={formData.department || ''}
-            onChange={(e) => handleFieldChange('department', e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="e.g., Ministry of Education"
-            required
-            aria-required="true"
-          />
-        </div>
-
-        {/* Information Sought */}
-        <div>
-          <label htmlFor="information_sought" className="block text-sm font-medium text-gray-700 mb-1">
-            Information You Want *
-          </label>
-          <textarea
-            id="information_sought"
-            value={formData.information_sought || ''}
-            onChange={(e) => handleFieldChange('information_sought', e.target.value)}
-            rows={4}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Describe what information you are seeking..."
-            required
-            aria-required="true"
-          />
-        </div>
-
-        {/* Reason */}
-        <div>
-          <label htmlFor="reason" className="block text-sm font-medium text-gray-700 mb-1">
-            Reason (Optional)
-          </label>
-          <textarea
-            id="reason"
-            value={formData.reason || ''}
-            onChange={(e) => handleFieldChange('reason', e.target.value)}
-            rows={2}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Why do you need this information?"
-          />
-        </div>
-
-        {/* Submit Button */}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-4 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-brand-green hover:bg-brand-green-light text-white font-bold py-3 px-4 rounded-md transition-colors duration-300 focus:outline-none focus:ring-4 focus:ring-brand-green focus:ring-opacity-50 disabled:opacity-50 disabled:cursor-wait"
         >
-          {isLoading ? 'Generating...' : 'Generate RTI Application'}
+          {isLoading ? 'Generating Document...' : 'Generate RTI Application'}
         </button>
       </form>
     </div>

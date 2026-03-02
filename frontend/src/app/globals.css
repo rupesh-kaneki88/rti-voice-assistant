@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+body {
+  @apply bg-neutral-100 text-neutral-800;
+  font-family: 'Inter', sans-serif;
+}
+
+.rti-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #047857 100%);
+}
+
+.card {
+  @apply bg-white rounded-xl shadow-md overflow-hidden;
+}
+
 /* Screen reader only class */
 .sr-only {
   position: absolute;
@@ -17,7 +30,7 @@
 
 /* Focus visible styles for accessibility */
 *:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 3px solid #fb923c;
   outline-offset: 2px;
 }
 

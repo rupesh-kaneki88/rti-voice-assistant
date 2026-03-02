@@ -1,4 +1,4 @@
-import type { Config } from 'tailwindcss'
+import type { Config } from 'tailwindcss';
 
 const config: Config = {
   content: [
@@ -9,21 +9,53 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+        'brand-blue': {
+          DEFAULT: '#1e3a8a',
+          light: '#2563eb',
         },
+        'brand-green': {
+          DEFAULT: '#047857',
+          light: '#059669',
+        },
+        'brand-orange': {
+          DEFAULT: '#f97316',
+          light: '#fb923c',
+        },
+        'neutral': {
+          50: '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#334155',
+          800: '#1e293b',
+          900: '#0f172a',
+        },
+      },
+      keyframes: {
+        'pulse-ring': {
+          '0%': { transform: 'scale(0.8)', opacity: '1' },
+          '100%': { transform: 'scale(1.4)', opacity: '0' },
+        },
+        'wave': {
+          '0%, 100%': { transform: 'scaleY(0.5)' },
+          '50%': { transform: 'scaleY(1.5)' },
+        },
+        'thinking-dot': {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
+      },
+      animation: {
+        'pulse-ring': 'pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'wave': 'wave 1.2s ease-in-out infinite',
+        'thinking-dot': 'thinking-dot 1s ease-in-out infinite',
       },
     },
   },
   plugins: [],
-}
-export default config
+};
+
+export default config;

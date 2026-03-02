@@ -87,7 +87,14 @@ export default function Home() {
                   <h2 id="voice-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
                     Voice Interaction
                   </h2>
-                  <VoiceRecorderRealtime sessionId={sessionId} language={language} />
+                  <VoiceRecorderRealtime 
+                    sessionId={sessionId} 
+                    language={language}
+                    onFormDataExtracted={() => {
+                      // Trigger form refresh when data is extracted
+                      window.dispatchEvent(new CustomEvent('refreshForm'));
+                    }}
+                  />
                 </div>
               </section>
 

@@ -250,6 +250,60 @@ Remember: Respond ONLY in {lang_info['lang']}. Be natural and conversational."""
         required_fields = ['applicant_name', 'address', 'information_sought', 'department']
         return all(form_data.get(field) for field in required_fields)
     
+    def _get_rule_based_response(self, user_message: str, form_data: dict, language: str) -> str:
+        """
+        Generate rule-based response when Bedrock is unavailable
+        Simple conversational logic based on what's missing
+        """
+        responses = {
+            'en': {
+                'need_info': "Thank you! I understand you want information about {topic}. Which government department should I address this request to?",
+                'need_dept': "Got it! Now, what is your name for the RTI application?",
+                'need_name': "Thank you, {name}! What is your address?",
+                'need_address': "Perfect! Let me confirm the details:\n- Information: {info}\n- Department: {dept}\n- Name: {name}\n- Address: {address}\n\nIs this correct?",
+                'complete': "Great! Your RTI application is complete. Would you like me to generate the PDF document?",
+                'acknowledge': "I understand. {message}"
+            },
+            'hi': {
+                'need_info': "धन्यवाद! मैं समझ गया कि आप {topic} के बारे में जानकारी चाहते हैं। मुझे किस सरकारी विभाग को यह अनुरोध भेजना चाहिए?",
+                'need_dept': "समझ गया! अब, आरटीआई आवेदन के लिए आपका नाम क्या है?",
+                'need_name': "धन्यवाद, {name}! आपका पता क्या है?",
+                'need_address': "बिल्कुल सही! मुझे विवरण की पुष्टि करने दें:\n- जानकारी: {info}\n- विभाग: {dept}\n- नाम: {name}\n- पता: {address}\n\nक्या यह सही है?",
+                'complete': "बढ़िया! आपका आरटीआई आवेदन पूरा हो गया है। क्या आप चाहते हैं कि मैं पीडीएफ दस्तावेज़ बनाऊं?",
+                'acknowledge': "मैं समझ गया। {message}"
+            },
+            'kn': {
+                'need_info': "ಧನ್ಯವಾದಗಳು! ನೀವು {topic} ಬಗ್ಗೆ ಮಾಹಿತಿ ಬಯಸುತ್ತೀರಿ ಎಂದು ನಾನು ಅರ್ಥಮಾಡಿಕೊಂಡಿದ್ದೇನೆ. ನಾನು ಈ ವಿನಂತಿಯನ್ನು ಯಾವ ಸರ್ಕಾರಿ ಇಲಾಖೆಗೆ ಕಳುಹಿಸಬೇಕು?",
+                'need_dept': "ಅರ್ಥವಾಯಿತು! ಈಗ, ಆರ್‌ಟಿಐ ಅರ್ಜಿಗಾಗಿ ನಿಮ್ಮ ಹೆಸರು ಏನು?",
+                'need_name': "ಧನ್ಯವಾದಗಳು, {name}! ನಿಮ್ಮ ವಿಳಾಸ ಏನು?",
+                'need_address': "ಪರಿಪೂರ್ಣ! ವಿವರಗಳನ್ನು ದೃಢೀಕರಿಸೋಣ:\n- ಮಾಹಿತಿ: {info}\n- ಇಲಾಖೆ: {dept}\n- ಹೆಸರು: {name}\n- ವಿಳಾಸ: {address}\n\nಇದು ಸರಿಯಾಗಿದೆಯೇ?",
+                'complete': "ಅದ್ಭುತ! ನಿಮ್ಮ ಆರ್‌ಟಿಐ ಅರ್ಜಿ ಪೂರ್ಣಗೊಂಡಿದೆ. ನಾನು ಪಿಡಿಎಫ್ ದಾಖಲೆಯನ್ನು ರಚಿಸಬೇಕೆ?",
+                'acknowledge': "ನಾನು ಅರ್ಥಮಾಡಿಕೊಂಡಿದ್ದೇನೆ। {message}"
+            }
+        }
+        
+        lang_responses = responses.get(language, responses['en'])
+        
+        # Determine what to ask based on what's missing
+        if not form_data.get('information_sought'):
+            return lang_responses['acknowledge'].format(message=user_message)
+        elif not form_data.get('department'):
+            topic = form_data.get('information_sought', 'this')
+            return lang_responses['need_info'].format(topic=topic)
+        elif not form_data.get('applicant_name'):
+            return lang_responses['need_dept']
+        elif not form_data.get('address'):
+            name = form_data.get('applicant_name', '')
+            return lang_responses['need_name'].format(name=name)
+        else:
+            # All fields present - confirm
+            return lang_responses['need_address'].format(
+                info=form_data.get('information_sought', ''),
+                dept=form_data.get('department', ''),
+                name=form_data.get('applicant_name', ''),
+                address=form_data.get('address', '')
+            )
+    
     def get_initial_greeting(self, language: str) -> str:
         """Get initial greeting message"""
         greetings = {

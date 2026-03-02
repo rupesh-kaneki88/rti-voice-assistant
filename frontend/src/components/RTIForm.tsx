@@ -39,6 +39,17 @@ export default function RTIForm({ sessionId, language }: RTIFormProps) {
   useEffect(() => {
     loadFormData();
     loadGuidance();
+    
+    // Listen for form refresh events
+    const handleRefresh = () => {
+      loadFormData();
+    };
+    
+    window.addEventListener('refreshForm', handleRefresh);
+    
+    return () => {
+      window.removeEventListener('refreshForm', handleRefresh);
+    };
   }, [sessionId]);
 
   const loadFormData = async () => {

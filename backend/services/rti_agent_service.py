@@ -1,5 +1,6 @@
 """
 RTI Agent Service - Conversational AI agent for RTI application filing
+Uses Groq (primary) and Gemini (fallback) for LLM inference
 """
 import json
 import logging
@@ -8,8 +9,8 @@ import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from shared.config import settings
-from shared.aws_clients import AWSClients
 from rti_templates import detect_category, get_suggested_departments, get_guidance
+from llm import GroqProvider, GeminiProvider
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +19,17 @@ class RTIAgentService:
     """Conversational AI agent for guiding users through RTI application"""
     
     def __init__(self):
-        self.bedrock_client = AWSClients.get_bedrock_runtime()
-        self.model_id = settings.bedrock_model_id
+        # Initialize LLM providers
+        self.groq = GroqProvider()
+        self.gemini = GeminiProvider()
+        
+        # Log available providers
+        if self.groq.is_available():
+            logger.info(f"✓ Primary LLM: {self.groq.name}")
+        if self.gemini.is_available():
+            logger.info(f"✓ Fallback LLM: {self.gemini.name}")
+        if not self.groq.is_available() and not self.gemini.is_available():
+            logger.warning("⚠ No LLM providers available - using rule-based fallback only")
 
     def _get_rule_based_response(self, user_message, form_data, language):
         return "Bedrock is unavailable. This is a fallback response."
@@ -44,51 +54,84 @@ class RTIAgentService:
             # Update form_data with new updates for context
             updated_form_data = {**form_data, **form_updates}
             
-            # Try to use Bedrock if available
-            try:
-                # Build conversation for Claude
-                messages = []
-                
-                # Add conversation history
-                for msg in conversation_history[-6:]:  # Last 3 exchanges
-                    messages.append({
-                        "role": msg["role"],
-                        "content": msg["content"]
-                    })
-                
-                # Add current user message
-                messages.append({
-                    "role": "user",
-                    "content": user_message
-                })
-                
-                # System prompt
-                system_prompt = self._get_system_prompt(language, updated_form_data)
-                
-                # Call Bedrock
-                body = json.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 1000,
-                    "temperature": 0.7,
-                    "system": system_prompt,
-                    "messages": messages
-                })
-                
-                logger.info(f"Calling Bedrock for agent response: language={language}")
-                
-                response = self.bedrock_client.invoke_model(
-                    modelId=self.model_id,
-                    body=body
-                )
-                
-                response_body = json.loads(response['body'].read())
-                agent_message = response_body['content'][0]['text']
-                
-                logger.info(f"Agent response received: {agent_message[:100]}...")
-                
-            except Exception as bedrock_error:
-                logger.warning(f"Bedrock unavailable, using rule-based fallback: {bedrock_error}")
-                # Use rule-based fallback
+            # Try to use LLM providers with conditional switching
+            agent_message = None
+            
+            # Conditional switching: Use Gemini for Hindi/Kannada, Groq for English
+            if language in ["hi", "kn"]:
+                # Prefer Gemini for Indian languages
+                if self.gemini.is_available():
+                    try:
+                        agent_message = self._generate_with_llm(
+                            self.gemini,
+                            user_message,
+                            conversation_history,
+                            updated_form_data,
+                            language
+                        )
+                    except Exception as e:
+                        logger.warning(f"Gemini failed: {e}, trying Groq...")
+                        if self.groq.is_available():
+                            try:
+                                agent_message = self._generate_with_llm(
+                                    self.groq,
+                                    user_message,
+                                    conversation_history,
+                                    updated_form_data,
+                                    language
+                                )
+                            except Exception as e2:
+                                logger.warning(f"Groq also failed: {e2}")
+                elif self.groq.is_available():
+                    try:
+                        agent_message = self._generate_with_llm(
+                            self.groq,
+                            user_message,
+                            conversation_history,
+                            updated_form_data,
+                            language
+                        )
+                    except Exception as e:
+                        logger.warning(f"Groq failed: {e}")
+            else:
+                # Prefer Groq for English
+                if self.groq.is_available():
+                    try:
+                        agent_message = self._generate_with_llm(
+                            self.groq,
+                            user_message,
+                            conversation_history,
+                            updated_form_data,
+                            language
+                        )
+                    except Exception as e:
+                        logger.warning(f"Groq failed: {e}, trying Gemini...")
+                        if self.gemini.is_available():
+                            try:
+                                agent_message = self._generate_with_llm(
+                                    self.gemini,
+                                    user_message,
+                                    conversation_history,
+                                    updated_form_data,
+                                    language
+                                )
+                            except Exception as e2:
+                                logger.warning(f"Gemini also failed: {e2}")
+                elif self.gemini.is_available():
+                    try:
+                        agent_message = self._generate_with_llm(
+                            self.gemini,
+                            user_message,
+                            conversation_history,
+                            updated_form_data,
+                            language
+                        )
+                    except Exception as e:
+                        logger.warning(f"Gemini failed: {e}")
+            
+            # Fallback to rule-based if all LLMs fail
+            if not agent_message:
+                logger.info("Using rule-based fallback")
                 agent_message = self._get_rule_based_response(user_message, updated_form_data, language)
             
             # Check if form is complete
@@ -105,8 +148,47 @@ class RTIAgentService:
             logger.error(f"Agent error: {e}", exc_info=True)
             raise
     
+    def _generate_with_llm(
+        self,
+        provider,
+        user_message: str,
+        conversation_history: list,
+        form_data: dict,
+        language: str
+    ) -> str:
+        """Generate response using an LLM provider"""
+        # Build messages for LLM
+        messages = []
+        
+        # Add conversation history (last 3 exchanges)
+        for msg in conversation_history[-6:]:
+            messages.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+        
+        # Add current user message
+        messages.append({
+            "role": "user",
+            "content": user_message
+        })
+        
+        # Get system prompt
+        system_prompt = self._get_system_prompt(language, form_data)
+        
+        # Generate response
+        logger.info(f"Generating with {provider.name} for language={language}")
+        response = provider.generate(
+            messages=messages,
+            system_prompt=system_prompt,
+            max_tokens=300,  # Keep responses short
+            temperature=0.7
+        )
+        
+        return response
+    
     def _get_system_prompt(self, language: str, form_data: dict) -> str:
-        """Get system prompt for the agent"""
+        """Get strict system prompt for the agent"""
         
         # Check what's missing
         missing_fields = []
@@ -122,17 +204,14 @@ class RTIAgentService:
         language_instructions = {
             'en': {
                 'lang': 'English',
-                'greeting': 'Hello! I am your RTI assistant.',
                 'role': 'You are a helpful RTI (Right to Information) assistant helping users file RTI applications in India.'
             },
             'hi': {
                 'lang': 'Hindi',
-                'greeting': 'नमस्ते! मैं आपका आरटीआई सहायक हूं।',
                 'role': 'आप एक सहायक आरटीआई (सूचना का अधिकार) सहायक हैं जो भारत में उपयोगकर्ताओं को आरटीआई आवेदन दाखिल करने में मदद कर रहे हैं।'
             },
             'kn': {
                 'lang': 'Kannada',
-                'greeting': 'ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಆರ್‌ಟಿಐ ಸಹಾಯಕ.',
                 'role': 'ನೀವು ಭಾರತದಲ್ಲಿ ಆರ್‌ಟಿಐ ಅರ್ಜಿಗಳನ್ನು ಸಲ್ಲಿಸಲು ಬಳಕೆದಾರರಿಗೆ ಸಹಾಯ ಮಾಡುವ ಸಹಾಯಕ ಆರ್‌ಟಿಐ ಸಹಾಯಕರು.'
             }
         }
@@ -141,13 +220,15 @@ class RTIAgentService:
         
         prompt = f"""{lang_info['role']}
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL RULES - YOU MUST FOLLOW THESE:
 1. Respond ONLY in {lang_info['lang']} language
-2. Be conversational, friendly, and helpful
-3. Ask ONE question at a time
-4. Guide the user step-by-step through the RTI application
-5. Extract information from user responses
-6. Confirm information before moving to next field
+2. Ask ONLY ONE question at a time
+3. Keep your response under 3 sentences
+4. NEVER give legal advice - only help collect information
+5. Focus ONLY on collecting missing form fields
+6. Be conversational but brief
+7. Do NOT explain RTI Act unless asked
+8. Do NOT provide examples unless asked
 
 CURRENT FORM STATUS:
 {json.dumps(form_data, indent=2, ensure_ascii=False)}
@@ -155,20 +236,19 @@ CURRENT FORM STATUS:
 MISSING INFORMATION: {', '.join(missing_fields) if missing_fields else 'None - form is complete!'}
 
 YOUR TASK:
-- If information is missing, ask for it naturally in conversation
-- If user provides information, acknowledge it and ask for the next missing field
-- Be encouraging and supportive
-- Explain what RTI is if user seems confused
-- Keep responses short (2-3 sentences max)
+- If information is missing, ask for the NEXT missing field only
+- If user provides information, acknowledge briefly and ask for next field
+- If form is complete, confirm and offer to generate PDF
+- Keep responses SHORT and FOCUSED
 
 CONVERSATION FLOW:
-1. First, understand what information they want from government
-2. Then ask which department
-3. Then ask for their name
-4. Then ask for their address
-5. Finally, confirm all details
+1. information_sought (what they want to know)
+2. department (which government department)
+3. applicant_name (their name)
+4. address (their address)
+5. Confirm and generate PDF
 
-Remember: Respond ONLY in {lang_info['lang']}. Be natural and conversational."""
+Remember: ONE question, under 3 sentences, {lang_info['lang']} only, no legal advice."""
 
         return prompt
     

@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     bedrock_region: str = os.getenv('BEDROCK_REGION', 'us-east-1')  # Bedrock available in us-east-1
     bedrock_max_tokens: int = int(os.getenv('BEDROCK_MAX_TOKENS', '2048'))
     bedrock_temperature: float = float(os.getenv('BEDROCK_TEMPERATURE', '0.7'))
+
+    # LLM providers
+    GROQ_API_KEY: Optional[str] = os.getenv('GROQ_API_KEY')
+    GROQ_MODEL: str = os.getenv('GROQ_MODEL')
+
+    # Gemini (Fallback - Multilingual)
+    GEMINI_API_KEY: Optional[str] = os.getenv('GEMINI_API_KEY')
+    GEMINI_MODEL: str = os.getenv('GEMINI_MODEL')
     
     # AWS Polly
     polly_voice_hindi: str = os.getenv('POLLY_VOICE_HINDI', 'Aditi')

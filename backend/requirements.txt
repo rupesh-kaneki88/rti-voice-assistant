@@ -1,5 +1,5 @@
 # RTI Voice Assistant - Backend Requirements
-# Fully functional prototype with AWS services
+# Fully functional prototype with LLM services
 
 # Web Framework
 fastapi==0.104.1
@@ -9,9 +9,13 @@ uvicorn[standard]==0.24.0
 pydantic==2.5.0
 pydantic-settings==2.1.0
 
-# AWS SDK
+# AWS SDK (for DynamoDB and S3 only)
 boto3==1.34.0
 botocore==1.34.0
+
+# LLM Providers
+groq==0.4.1
+google-generativeai==0.3.2
 
 # Environment Variables
 python-dotenv==1.0.0

@@ -1,142 +1,225 @@
 """
 RTI Application Templates for Common Requests
 These templates help the agent guide users through common RTI scenarios
+Fully Multilingual RTI Templates
+Supports English (en), Hindi (hi), Kannada (kn)
 """
 
 RTI_TEMPLATES = {
+
+    # =========================
+    # EDUCATION
+    # =========================
     "education": {
         "en": {
             "name": "Education Information Request",
             "common_questions": [
                 "Details of government spending on education in my district",
                 "Information about scholarship schemes and eligibility",
-                "Details of school infrastructure development projects",
-                "Teacher recruitment and vacancy information",
-                "Mid-day meal scheme implementation details"
+                "Details of school infrastructure development projects"
             ],
             "suggested_departments": [
                 "Ministry of Education",
                 "Department of School Education",
                 "University Grants Commission"
             ],
-            "guidance": "For education-related information, you can request details about spending, schemes, infrastructure, or policies."
+            "guidance": "You may request details about education spending, scholarships, infrastructure, or recruitment."
         },
         "hi": {
             "name": "शिक्षा सूचना अनुरोध",
             "common_questions": [
                 "मेरे जिले में शिक्षा पर सरकारी खर्च का विवरण",
-                "छात्रवृत्ति योजनाओं और पात्रता के बारे में जानकारी",
+                "छात्रवृत्ति योजनाओं और पात्रता की जानकारी",
                 "स्कूल बुनियादी ढांचा विकास परियोजनाओं का विवरण"
             ],
             "suggested_departments": [
                 "शिक्षा मंत्रालय",
-                "स्कूल शिक्षा विभाग"
-            ]
+                "स्कूल शिक्षा विभाग",
+                "विश्वविद्यालय अनुदान आयोग"
+            ],
+            "guidance": "आप शिक्षा खर्च, छात्रवृत्ति, बुनियादी ढांचे या भर्ती से संबंधित जानकारी मांग सकते हैं।"
         },
         "kn": {
             "name": "ಶಿಕ್ಷಣ ಮಾಹಿತಿ ವಿನಂತಿ",
             "common_questions": [
-                "ನನ್ನ ಜಿಲ್ಲೆಯಲ್ಲಿ ಶಿಕ್ಷಣದ ಮೇಲೆ ಸರ್ಕಾರದ ಖರ್ಚಿನ ವಿವರಗಳು",
-                "ವಿದ್ಯಾರ್ಥಿವೇತನ ಯೋಜನೆಗಳು ಮತ್ತು ಅರ್ಹತೆಯ ಬಗ್ಗೆ ಮಾಹಿತಿ"
+                "ನನ್ನ ಜಿಲ್ಲೆಯಲ್ಲಿ ಶಿಕ್ಷಣದ ಮೇಲೆ ಸರ್ಕಾರಿ ವೆಚ್ಚದ ವಿವರಗಳು",
+                "ವಿದ್ಯಾರ್ಥಿವೇತನ ಯೋಜನೆಗಳು ಮತ್ತು ಅರ್ಹತೆಯ ಮಾಹಿತಿ",
+                "ಶಾಲಾ ಮೂಲಸೌಕರ್ಯ ಅಭಿವೃದ್ಧಿ ಯೋಜನೆಗಳ ವಿವರಗಳು"
             ],
             "suggested_departments": [
-                "ಶಿಕ್ಷಣ ಸಚಿವಾಲಯ"
-            ]
+                "ಶಿಕ್ಷಣ ಸಚಿವಾಲಯ",
+                "ಶಾಲಾ ಶಿಕ್ಷಣ ಇಲಾಖೆ",
+                "ವಿಶ್ವವಿದ್ಯಾಲಯ ಅನುದಾನ ಆಯೋಗ"
+            ],
+            "guidance": "ನೀವು ಶಿಕ್ಷಣ ವೆಚ್ಚ, ವಿದ್ಯಾರ್ಥಿವೇತನ, ಮೂಲಸೌಕರ್ಯ ಅಥವಾ ನೇಮಕಾತಿ ಕುರಿತು ಮಾಹಿತಿ ಕೇಳಬಹುದು."
         }
     },
-    
+
+    # =========================
+    # HEALTH
+    # =========================
     "health": {
         "en": {
             "name": "Health Information Request",
             "common_questions": [
                 "Details of government health schemes in my area",
-                "Information about hospital infrastructure and facilities",
-                "Medicine procurement and distribution details",
-                "Health worker recruitment and deployment information",
-                "COVID-19 vaccination and treatment expenditure"
+                "Hospital infrastructure and facilities information",
+                "Medicine procurement and distribution details"
             ],
             "suggested_departments": [
                 "Ministry of Health and Family Welfare",
                 "Department of Health Services",
                 "National Health Mission"
             ],
-            "guidance": "For health-related information, you can request details about schemes, hospitals, medicines, or health programs."
+            "guidance": "You may request details about hospitals, medicines, schemes, or public health programs."
+        },
+        "hi": {
+            "name": "स्वास्थ्य सूचना अनुरोध",
+            "common_questions": [
+                "मेरे क्षेत्र में सरकारी स्वास्थ्य योजनाओं का विवरण",
+                "अस्पताल सुविधाओं की जानकारी",
+                "दवाओं की खरीद और वितरण का विवरण"
+            ],
+            "suggested_departments": [
+                "स्वास्थ्य और परिवार कल्याण मंत्रालय",
+                "स्वास्थ्य सेवा विभाग",
+                "राष्ट्रीय स्वास्थ्य मिशन"
+            ],
+            "guidance": "आप अस्पताल, दवाओं या स्वास्थ्य योजनाओं से संबंधित जानकारी मांग सकते हैं।"
+        },
+        "kn": {
+            "name": "ಆರೋಗ್ಯ ಮಾಹಿತಿ ವಿನಂತಿ",
+            "common_questions": [
+                "ನನ್ನ ಪ್ರದೇಶದಲ್ಲಿ ಸರ್ಕಾರಿ ಆರೋಗ್ಯ ಯೋಜನೆಗಳ ವಿವರಗಳು",
+                "ಆಸ್ಪತ್ರೆ ಸೌಲಭ್ಯಗಳ ಮಾಹಿತಿ",
+                "ಔಷಧ ಖರೀದಿ ಮತ್ತು ವಿತರಣೆ ವಿವರಗಳು"
+            ],
+            "suggested_departments": [
+                "ಆರೋಗ್ಯ ಮತ್ತು ಕುಟುಂಬ ಕಲ್ಯಾಣ ಸಚಿವಾಲಯ",
+                "ಆರೋಗ್ಯ ಸೇವಾ ಇಲಾಖೆ",
+                "ರಾಷ್ಟ್ರೀಯ ಆರೋಗ್ಯ ಮಿಷನ್"
+            ],
+            "guidance": "ನೀವು ಆಸ್ಪತ್ರೆಗಳು, ಔಷಧಿಗಳು ಅಥವಾ ಆರೋಗ್ಯ ಯೋಜನೆಗಳ ಕುರಿತು ಮಾಹಿತಿ ಕೇಳಬಹುದು."
         }
     },
-    
+
+    # =========================
+    # TRANSPORT
+    # =========================
     "transport": {
         "en": {
             "name": "Transport Information Request",
             "common_questions": [
-                "Details of road construction projects in my area",
-                "Information about public transport schemes and subsidies",
-                "Traffic management and road safety measures",
-                "Vehicle registration and licensing procedures",
-                "Details of transport infrastructure development"
+                "Road construction projects in my area",
+                "Public transport schemes and subsidies",
+                "Traffic management measures"
             ],
             "suggested_departments": [
                 "Ministry of Road Transport and Highways",
                 "Department of Transport",
                 "National Highways Authority"
             ],
-            "guidance": "For transport-related information, you can request details about roads, public transport, or vehicle services."
+            "guidance": "You may request information about roads, public transport, or traffic management."
+        },
+        "hi": {
+            "name": "परिवहन सूचना अनुरोध",
+            "common_questions": [
+                "मेरे क्षेत्र में सड़क निर्माण परियोजनाएं",
+                "सार्वजनिक परिवहन योजनाएं",
+                "यातायात प्रबंधन उपाय"
+            ],
+            "suggested_departments": [
+                "सड़क परिवहन और राजमार्ग मंत्रालय",
+                "परिवहन विभाग",
+                "राष्ट्रीय राजमार्ग प्राधिकरण"
+            ],
+            "guidance": "आप सड़क, परिवहन या यातायात प्रबंधन से संबंधित जानकारी मांग सकते हैं।"
+        },
+        "kn": {
+            "name": "ಸಾರಿಗೆ ಮಾಹಿತಿ ವಿನಂತಿ",
+            "common_questions": [
+                "ನನ್ನ ಪ್ರದೇಶದಲ್ಲಿ ರಸ್ತೆ ನಿರ್ಮಾಣ ಯೋಜನೆಗಳು",
+                "ಸಾರ್ವಜನಿಕ ಸಾರಿಗೆ ಯೋಜನೆಗಳು",
+                "ಸಂಚಾರ ನಿರ್ವಹಣಾ ಕ್ರಮಗಳು"
+            ],
+            "suggested_departments": [
+                "ರಸ್ತೆ ಸಾರಿಗೆ ಮತ್ತು ಹೆದ್ದಾರಿ ಸಚಿವಾಲಯ",
+                "ಸಾರಿಗೆ ಇಲಾಖೆ",
+                "ರಾಷ್ಟ್ರೀಯ ಹೆದ್ದಾರಿ ಪ್ರಾಧಿಕಾರ"
+            ],
+            "guidance": "ನೀವು ರಸ್ತೆ, ಸಾರಿಗೆ ಅಥವಾ ಸಂಚಾರ ನಿರ್ವಹಣೆ ಕುರಿತು ಮಾಹಿತಿ ಕೇಳಬಹುದು."
         }
     },
-    
+
+    # =========================
+    # EMPLOYMENT
+    # =========================
     "employment": {
         "en": {
             "name": "Employment Information Request",
             "common_questions": [
-                "Details of government job vacancies and recruitment",
-                "Information about employment schemes and programs",
-                "Skill development and training initiatives",
-                "Unemployment allowance and benefits",
-                "Details of government contractor payments"
+                "Government job vacancies",
+                "Recruitment process details",
+                "Skill development schemes"
             ],
             "suggested_departments": [
                 "Ministry of Labour and Employment",
                 "Department of Employment",
                 "Skill Development Authority"
             ],
-            "guidance": "For employment-related information, you can request details about jobs, schemes, or training programs."
-        }
-    },
-    
-    "welfare": {
-        "en": {
-            "name": "Social Welfare Information Request",
+            "guidance": "You may request details about jobs, recruitment, or employment schemes."
+        },
+        "hi": {
+            "name": "रोजगार सूचना अनुरोध",
             "common_questions": [
-                "Details of pension schemes and beneficiaries",
-                "Information about housing schemes and allotments",
-                "Ration card and food subsidy details",
-                "Disability benefits and support programs",
-                "Details of welfare scheme implementation"
+                "सरकारी नौकरी रिक्तियां",
+                "भर्ती प्रक्रिया का विवरण",
+                "कौशल विकास योजनाएं"
             ],
             "suggested_departments": [
-                "Ministry of Social Justice and Empowerment",
-                "Department of Social Welfare",
-                "Food and Civil Supplies Department"
+                "श्रम और रोजगार मंत्रालय",
+                "रोजगार विभाग",
+                "कौशल विकास प्राधिकरण"
             ],
-            "guidance": "For welfare-related information, you can request details about pensions, housing, food subsidies, or support programs."
-        }
-    },
-    
-    "environment": {
-        "en": {
-            "name": "Environment Information Request",
+            "guidance": "आप नौकरी, भर्ती या रोजगार योजनाओं के बारे में जानकारी मांग सकते हैं।"
+        },
+        "kn": {
+            "name": "ಉದ್ಯೋಗ ಮಾಹಿತಿ ವಿನಂತಿ",
             "common_questions": [
-                "Details of environmental clearances granted",
-                "Information about pollution control measures",
-                "Forest conservation and tree plantation details",
-                "Waste management and sanitation projects",
-                "Details of environmental impact assessments"
+                "ಸರ್ಕಾರಿ ಉದ್ಯೋಗ ಖಾಲಿ ಹುದ್ದೆಗಳು",
+                "ನೇಮಕಾತಿ ಪ್ರಕ್ರಿಯೆಯ ವಿವರಗಳು",
+                "ಕೌಶಲ್ಯ ಅಭಿವೃದ್ಧಿ ಯೋಜನೆಗಳು"
             ],
             "suggested_departments": [
-                "Ministry of Environment, Forest and Climate Change",
-                "State Pollution Control Board",
-                "Forest Department"
+                "ಕಾರ್ಮಿಕ ಮತ್ತು ಉದ್ಯೋಗ ಸಚಿವಾಲಯ",
+                "ಉದ್ಯೋಗ ಇಲಾಖೆ",
+                "ಕೌಶಲ್ಯ ಅಭಿವೃದ್ಧಿ ಪ್ರಾಧಿಕಾರ"
             ],
-            "guidance": "For environment-related information, you can request details about clearances, pollution control, or conservation."
+            "guidance": "ನೀವು ಉದ್ಯೋಗ, ನೇಮಕಾತಿ ಅಥವಾ ಉದ್ಯೋಗ ಯೋಜನೆಗಳ ಬಗ್ಗೆ ಮಾಹಿತಿ ಕೇಳಬಹುದು."
+        }
+    },
+
+    # =========================
+    # GENERAL
+    # =========================
+    "general": {
+        "en": {
+            "name": "General Information Request",
+            "common_questions": [],
+            "suggested_departments": [],
+            "guidance": "Please specify which department the information relates to."
+        },
+        "hi": {
+            "name": "सामान्य सूचना अनुरोध",
+            "common_questions": [],
+            "suggested_departments": [],
+            "guidance": "कृपया बताएं कि यह जानकारी किस विभाग से संबंधित है।"
+        },
+        "kn": {
+            "name": "ಸಾಮಾನ್ಯ ಮಾಹಿತಿ ವಿನಂತಿ",
+            "common_questions": [],
+            "suggested_departments": [],
+            "guidance": "ದಯವಿಟ್ಟು ಈ ಮಾಹಿತಿ ಯಾವ ಇಲಾಖೆಗೆ ಸಂಬಂಧಿಸಿದೆ ಎಂದು ತಿಳಿಸಿ."
         }
     }
 }
@@ -144,7 +227,7 @@ RTI_TEMPLATES = {
 
 def get_template(category: str, language: str = "en") -> dict:
     """Get RTI template for a category and language"""
-    template = RTI_TEMPLATES.get(category, {})
+    template = RTI_TEMPLATES.get(category, RTI_TEMPLATES["general"])
     return template.get(language, template.get("en", {}))
 
 

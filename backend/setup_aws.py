@@ -131,24 +131,6 @@ def create_s3_buckets():
                 raise
 
 
-def check_bedrock_access():
-    """Check if Bedrock is accessible"""
-    try:
-        print("\nChecking Amazon Bedrock access...")
-        bedrock = boto3.client('bedrock-runtime', region_name='ap-south-1')
-        
-        # Try to list foundation models
-        print("✓ Amazon Bedrock is accessible")
-        print("  - Region: ap-south-1")
-        print("  - Model: Claude 3 Haiku")
-        print("  - Note: Make sure you have enabled Claude 3 Haiku in Bedrock console")
-        
-    except Exception as e:
-        print(f"⚠ Warning: Could not access Bedrock: {e}")
-        print("  - Go to AWS Console > Bedrock > Model access")
-        print("  - Request access to Claude 3 Haiku")
-
-
 def update_env_file():
     """Update .env file with AWS resource names"""
     try:
@@ -167,11 +149,9 @@ DYNAMODB_SESSIONS_TABLE={DYNAMODB_SESSIONS_TABLE}
 S3_DOCUMENTS_BUCKET={S3_DOCUMENTS_BUCKET}
 S3_AUDIO_BUCKET={S3_AUDIO_BUCKET}
 
-# Amazon Bedrock
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
-BEDROCK_REGION=ap-south-1
-BEDROCK_MAX_TOKENS=2048
-BEDROCK_TEMPERATURE=0.7
+# LLM Providers (Groq/Gemini) - Add your keys here
+GROQ_API_KEY=
+GEMINI_API_KEY=
 
 # AWS Polly
 POLLY_VOICE_HINDI=Aditi
@@ -213,14 +193,13 @@ def main():
         # Create resources
         create_dynamodb_table()
         create_s3_buckets()
-        check_bedrock_access()
         update_env_file()
         
         print("\n" + "=" * 60)
         print("✓ AWS Setup Complete!")
         print("=" * 60)
         print("\nNext steps:")
-        print("1. Enable Claude 3 Haiku in Bedrock console (if not already done)")
+        print("1. Add your GROQ_API_KEY and/or GEMINI_API_KEY to the .env file")
         print("2. Install dependencies: pip install -r requirements.txt")
         print("3. Start the server: uvicorn app:app --reload")
         print("\nEstimated costs with $100 credits:")
@@ -228,8 +207,8 @@ def main():
         print("  - S3: ~$0.01/day (with 24h lifecycle)")
         print("  - Transcribe: ~$0.024/minute")
         print("  - Polly: ~$0.004/1000 chars")
-        print("  - Bedrock (Claude Haiku): ~$0.00025/1000 tokens")
-        print("\nTotal: Should last 2-3 months with moderate usage!")
+        print("  - Groq/Gemini: Check their respective pricing pages.")
+        print("\nTotal: Should last a long time with moderate usage!")
         
     except Exception as e:
         print(f"\n✗ Setup failed: {e}")

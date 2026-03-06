@@ -25,7 +25,6 @@ class AWSClients:
     
     _dynamodb = None
     _s3 = None
-    _bedrock_runtime = None
     _polly = None
     _transcribe = None
     _kms = None
@@ -49,20 +48,6 @@ class AWSClients:
                 return None
             cls._s3 = boto3.client('s3', config=boto_config)
         return cls._s3
-    
-    @classmethod
-    def get_bedrock_runtime(cls):
-        """Get Bedrock Runtime client"""
-        if cls._bedrock_runtime is None:
-            if settings.use_mock_services:
-                logger.info("Using mock Bedrock")
-                return None
-            bedrock_config = Config(
-                region_name=settings.bedrock_region,
-                retries={'max_attempts': 3, 'mode': 'adaptive'}
-            )
-            cls._bedrock_runtime = boto3.client('bedrock-runtime', config=bedrock_config)
-        return cls._bedrock_runtime
     
     @classmethod
     def get_polly(cls):

@@ -14,7 +14,7 @@ boto3==1.34.0
 botocore==1.34.0
 
 # LLM Providers
-groq==0.4.1
+groq==1.0.0
 google-generativeai==0.3.2
 
 # Environment Variables
@@ -32,5 +32,6 @@ pydub==0.25.1
 # For handling audio files
 python-multipart==0.0.6
 
-# gTTS for Kannada support
+# TTS Providers
+edge-tts==7.2.7
 gTTS==2.5.0

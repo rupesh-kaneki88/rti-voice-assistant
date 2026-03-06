@@ -21,8 +21,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'services'))
 
 from shared.config import settings
 from shared.aws_clients import get_sessions_table
-from services.bedrock_service import BedrockService
-from services.polly_service import PollyService
+from services.tts_service import TTSService
 from services.transcribe_service import TranscribeService
 from services.pdf_service import PDFService
 from services.rti_agent_service import RTIAgentService
@@ -46,9 +45,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize AWS services
-bedrock_service = None
-polly_service = None
+# Initialize services
+tts_service = None
 transcribe_service = None
 pdf_service = None
 rti_agent_service = None
@@ -60,24 +58,25 @@ sessions_memory = {}
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global bedrock_service, polly_service, transcribe_service, pdf_service, rti_agent_service
+    global tts_service, transcribe_service, pdf_service, rti_agent_service
     
     try:
         if not settings.use_mock_services:
-            logger.info("Initializing AWS services...")
-            bedrock_service = BedrockService()
-            polly_service = PollyService()
+            logger.info("Initializing services...")
+            tts_service = TTSService()
             transcribe_service = TranscribeService()
             pdf_service = PDFService()
             rti_agent_service = RTIAgentService()
-            logger.info("✓ AWS services initialized")
+            logger.info("✓ Services initialized")
         else:
             logger.info("Using mock services (USE_MOCK_SERVICES=true)")
             pdf_service = PDFService()  # PDF service doesn't need AWS
+            rti_agent_service = RTIAgentService()  # Agent service works without AWS
     except Exception as e:
         logger.warning(f"Could not initialize AWS services: {e}")
         logger.info("Falling back to mock services")
         pdf_service = PDFService()  # Always initialize PDF service
+        rti_agent_service = RTIAgentService()  # Always initialize agent service
 
 
 # ============================================================================
@@ -196,8 +195,8 @@ async def health():
         "timestamp": datetime.utcnow().isoformat(),
         "mode": "mock" if settings.use_mock_services else "aws",
         "services": {
-            "bedrock": bedrock_service is not None,
-            "polly": polly_service is not None,
+            "rti_agent": rti_agent_service is not None,
+            "tts": tts_service is not None,
             "transcribe": transcribe_service is not None
         }
     }
@@ -256,57 +255,11 @@ async def transcribe_audio(request: TranscribeRequest):
 @app.post("/voice/extract-form-data")
 async def extract_form_data(text: str, language: str = "en"):
     """
-    Extract RTI form fields from transcribed text using Bedrock
+    Extract RTI form fields from transcribed text
+    Uses simple keyword extraction (LLM extraction happens in conversation endpoint)
     """
     try:
-        if bedrock_service and not settings.use_mock_services:
-            try:
-                # Use Bedrock to extract structured data
-                prompt = f"""Extract RTI application information from this text: "{text}"
-
-Extract and return ONLY a JSON object with these fields (use null if not mentioned):
-- information_sought: What information is being requested
-- department: Which government department
-- reason: Why they need this information
-
-Return ONLY valid JSON, no other text."""
-
-                import json as json_lib
-                body = json_lib.dumps({
-                    "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 500,
-                    "temperature": 0.3,
-                    "messages": [{"role": "user", "content": prompt}]
-                })
-                
-                response = bedrock_service.bedrock_client.invoke_model(
-                    modelId=settings.bedrock_model_id,
-                    body=body
-                )
-                
-                response_body = json_lib.loads(response['body'].read())
-                extracted_text = response_body['content'][0]['text']
-                
-                # Parse JSON from response
-                try:
-                    extracted_data = json_lib.loads(extracted_text)
-                except:
-                    # If Bedrock returns text with JSON, extract it
-                    import re
-                    json_match = re.search(r'\{.*\}', extracted_text, re.DOTALL)
-                    if json_match:
-                        extracted_data = json_lib.loads(json_match.group())
-                    else:
-                        extracted_data = {}
-                
-                return {
-                    "extracted_data": extracted_data,
-                    "mode": "bedrock"
-                }
-            except Exception as e:
-                logger.error(f"Bedrock extraction error: {e}")
-        
-        # Fallback: Simple keyword extraction
+        # Simple keyword extraction
         extracted_data = {
             "information_sought": text,
             "department": "Ministry of Education" if "education" in text.lower() or "शिक्षा" in text else None,
@@ -326,7 +279,7 @@ Return ONLY valid JSON, no other text."""
 @app.post("/voice/tts")
 async def text_to_speech(request: TTSRequest):
     """
-    Convert text to speech using AWS Polly
+    Convert text to speech using gTTS (primary) and AWS Polly (fallback).
     """
     try:
         logger.info(f"TTS request: language={request.language}, text_length={len(request.text)}")
@@ -337,21 +290,25 @@ async def text_to_speech(request: TTSRequest):
                 detail=f"Invalid language. Supported: {', '.join(settings.supported_languages)}"
             )
         
-        # Use AWS Polly if available
-        if polly_service and not settings.use_mock_services:
+        # Use the unified TTS service if available
+        if tts_service and not settings.use_mock_services:
             try:
-                audio_bytes = polly_service.synthesize_speech(request.text, request.language)
+                audio_bytes = await tts_service.synthesize_speech(request.text, request.language)
                 audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+                
+                # The mode can be determined by checking which service is available
+                # For simplicity, we'll just label it based on the new service.
+                mode = "tts_service" 
                 
                 return {
                     "audio": audio_base64,
                     "language": request.language,
                     "format": "mp3",
-                    "mode": "aws_polly",
+                    "mode": mode,
                     "size_bytes": len(audio_bytes)
                 }
             except Exception as e:
-                logger.error(f"AWS Polly error: {e}")
+                logger.error(f"TTS service failed: {e}")
                 logger.info("Falling back to mock TTS")
         
         # Mock audio response (fallback)
@@ -661,23 +618,9 @@ async def generate_document(session_id: str):
 
 @app.post("/guidance/explain")
 async def explain_rti_rights(language: str = "en"):
-    """Explain RTI rights in simple language using Amazon Bedrock"""
+    """Explain RTI rights in simple language"""
     try:
-        # Use Bedrock if available
-        if bedrock_service and not settings.use_mock_services:
-            try:
-                explanation = bedrock_service.explain_rti_rights(language)
-                return {
-                    "language": language,
-                    "explanation": explanation,
-                    "source": "Amazon Bedrock (Claude 3 Haiku)",
-                    "mode": "aws_bedrock"
-                }
-            except Exception as e:
-                logger.error(f"Bedrock error: {e}")
-                logger.info("Falling back to mock explanation")
-        
-        # Mock explanations (fallback)
+        # Simple explanations (LLM can enhance these in conversation)
         explanations = {
             'en': "The Right to Information Act allows you to request information from government offices. You can ask questions about government decisions, policies, and actions.",
             'hi': "सूचना का अधिकार अधिनियम आपको सरकारी कार्यालयों से जानकारी मांगने की अनुमति देता है। आप सरकारी निर्णयों, नीतियों और कार्यों के बारे में सवाल पूछ सकते हैं।",
@@ -688,7 +631,7 @@ async def explain_rti_rights(language: str = "en"):
             "language": language,
             "explanation": explanations.get(language, explanations['en']),
             "source": "RTI Act 2005",
-            "mode": "mock"
+            "mode": "simple"
         }
     except Exception as e:
         logger.error(f"Guidance error: {e}", exc_info=True)

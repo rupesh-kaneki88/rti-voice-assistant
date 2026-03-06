@@ -22,12 +22,6 @@ class Settings(BaseSettings):
     # S3 Buckets
     s3_documents_bucket: str = os.getenv('S3_DOCUMENTS_BUCKET', 'rti-documents-dev')
     s3_audio_bucket: str = os.getenv('S3_AUDIO_BUCKET', 'rti-audio-dev')
-    
-    # Amazon Bedrock
-    bedrock_model_id: str = os.getenv('BEDROCK_MODEL_ID', 'anthropic.claude-3-haiku-20240307-v1:0')
-    bedrock_region: str = os.getenv('BEDROCK_REGION', 'us-east-1')  # Bedrock available in us-east-1
-    bedrock_max_tokens: int = int(os.getenv('BEDROCK_MAX_TOKENS', '2048'))
-    bedrock_temperature: float = float(os.getenv('BEDROCK_TEMPERATURE', '0.7'))
 
     # LLM providers
     GROQ_API_KEY: Optional[str] = os.getenv('GROQ_API_KEY')

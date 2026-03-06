@@ -32,7 +32,10 @@ class RTIAgentService:
             logger.warning("⚠ No LLM providers available - using rule-based fallback only")
 
     def _get_rule_based_response(self, user_message, form_data, language):
-        return "Bedrock is unavailable. This is a fallback response."
+        """Generate a rule-based response when LLM providers are unavailable."""
+        # This is a simplified fallback. The more detailed rule-based logic follows.
+        logger.info("Using simplified rule-based response as LLMs are offline.")
+        return "Our AI is currently unavailable. Please try again later."
     
     def get_agent_response(self, user_message: str, conversation_history: list, form_data: dict, language: str = 'en') -> dict:
         """
@@ -208,7 +211,21 @@ class RTIAgentService:
             },
             'hi': {
                 'lang': 'Hindi',
-                'role': 'आप एक सहायक आरटीआई (सूचना का अधिकार) सहायक हैं जो भारत में उपयोगकर्ताओं को आरटीआई आवेदन दाखिल करने में मदद कर रहे हैं।'
+                'role': 'आप भारत में उपयोगकर्ताओं को आरटीआई आवेदन दाखिल करने में मदद करने वाली एक महिला आरटीआई सहायक हैं।',
+                'gender': '''
+                    महत्वपूर्ण व्याकरण नियम:
+                    - आप एक महिला सहायक हैं।
+                    - हमेशा स्त्रीलिंग (female grammar) का उपयोग करें।
+                    - उदाहरण:
+                    - "मैं आपकी मदद कर रही हूँ"
+                    - "मैं जानकारी एकत्र कर रही हूँ"
+                    - "मैं आपका आवेदन तैयार कर रही हूँ"
+
+                    गलत उदाहरण (कभी उपयोग न करें):
+                    - "मैं आपकी मदद कर रहा हूँ"
+                    - "मैं बता रहा हूँ"
+                    - "मैं कर रहा हूँ"
+                    '''
             },
             'kn': {
                 'lang': 'Kannada',
@@ -218,7 +235,11 @@ class RTIAgentService:
         
         lang_info = language_instructions.get(language, language_instructions['en'])
         
+        # Add gender instruction if present
+        gender_instruction = lang_info.get('gender', '')
+        
         prompt = f"""{lang_info['role']}
+{gender_instruction}
 
 CRITICAL RULES - YOU MUST FOLLOW THESE:
 1. Respond ONLY in {lang_info['lang']} language
@@ -229,6 +250,7 @@ CRITICAL RULES - YOU MUST FOLLOW THESE:
 6. Be conversational but brief
 7. Do NOT explain RTI Act unless asked
 8. Do NOT provide examples unless asked
+9. If responding in Hindi, ALWAYS use feminine grammar like "कर रही हूँ", never "कर रहा हूँ".
 
 CURRENT FORM STATUS:
 {json.dumps(form_data, indent=2, ensure_ascii=False)}
@@ -332,7 +354,7 @@ Remember: ONE question, under 3 sentences, {lang_info['lang']} only, no legal ad
     
     def _get_rule_based_response(self, user_message: str, form_data: dict, language: str) -> str:
         """
-        Generate rule-based response when Bedrock is unavailable
+        Generate rule-based response when LLMs are unavailable
         Simple conversational logic based on what's missing
         """
         responses = {
@@ -388,7 +410,9 @@ Remember: ONE question, under 3 sentences, {lang_info['lang']} only, no legal ad
         """Get initial greeting message"""
         greetings = {
             'en': "Hello! I'm your RTI assistant. I'll help you file a Right to Information application. What information would you like to request from the government?",
-            'hi': "नमस्ते! मैं आपका आरटीआई सहायक हूं। मैं आपको सूचना का अधिकार आवेदन दाखिल करने में मदद करूंगा। आप सरकार से कौन सी जानकारी चाहते हैं?",
+            
+            'hi': "नमस्ते! मैं आपकी आरटीआई सहायक हूँ। मैं आपको सूचना का अधिकार आवेदन दाखिल करने में मदद करूँगी। आप सरकार से कौन सी जानकारी प्राप्त करना चाहती हैं?",
+            
             'kn': "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಆರ್‌ಟಿಐ ಸಹಾಯಕ. ನಾನು ನಿಮಗೆ ಮಾಹಿತಿ ಹಕ್ಕು ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ. ನೀವು ಸರ್ಕಾರದಿಂದ ಯಾವ ಮಾಹಿತಿಯನ್ನು ವಿನಂತಿಸಲು ಬಯಸುತ್ತೀರಿ?"
         }
         return greetings.get(language, greetings['en'])

@@ -8,7 +8,7 @@ body {
 }
 
 .rti-header {
-  background: linear-gradient(135deg, #1e3a8a 0%, #047857 100%);
+  @apply bg-white shadow-md;
 }
 
 .card {

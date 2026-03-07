@@ -53,10 +53,10 @@ export default function Home() {
       {/* Header */}
       <header className="rti-header shadow-lg">
         <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-extrabold text-white tracking-tight">
+          <h1 className="text-4xl md:text-5xl font-extrabold text-neutral-900 tracking-tight">
             RTI Voice Assistant
           </h1>
-          <p className="mt-4 text-lg md:text-xl text-neutral-200">
+          <p className="mt-4 text-lg md:text-xl text-neutral-600">
             Your voice-powered guide to the Right to Information Act.
           </p>
         </div>

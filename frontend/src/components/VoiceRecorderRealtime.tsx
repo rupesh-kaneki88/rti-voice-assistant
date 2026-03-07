@@ -23,14 +23,23 @@ declare global {
 
 export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdate }: VoiceRecorderProps) {
   const [agentState, setAgentState] = useState<AgentState>('idle');
-  const [transcription, setTranscription] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
-  const [agentMessage, setAgentMessage] = useState<string>('');
+  
+  interface ConversationMessage {
+    role: 'user' | 'agent';
+    content: string;
+  }
+  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const hasGreetedRef = useRef(false);
+  const conversationEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // Scroll to the bottom of the conversation history
+    conversationEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [conversationHistory]);
 
   useEffect(() => {
     // Check if Web Speech API is supported
@@ -44,10 +53,10 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
   useEffect(() => {
     // On language change, if we have already greeted, fetch the new guidance message to display
     const updateGuidanceOnLanguageChange = async () => {
-      if (hasGreetedRef.current && sessionId) {
+      if (conversationHistory.length > 0 && sessionId) {
         try {
           const response = await haveConversation(sessionId, '', language);
-          setAgentMessage(response.agent_response);
+          setConversationHistory(prev => [...prev, { role: 'agent', content: response.agent_response }]);
         } catch (err) {
           console.error('Guidance update error:', err);
         }
@@ -59,7 +68,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
   const getStateMessage = () => {
     switch (agentState) {
       case 'idle':
-        return hasGreetedRef.current ? 'Ready to listen' : 'Click Speak to start';
+        return conversationHistory.length > 0 ? 'Ready to listen' : 'Click Speak to start';
       case 'listening':
         return 'Listening... Speak now';
       case 'thinking':
@@ -75,96 +84,59 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
 
   const startListening = async () => {
     // First interaction: Greet the user, then start listening
-    if (!hasGreetedRef.current && sessionId) {
-      hasGreetedRef.current = true;
+    if (conversationHistory.length === 0 && sessionId) {
       try {
         setAgentState('thinking');
         const response = await haveConversation(sessionId, '', language);
         const greeting = response.agent_response;
-        setAgentMessage(greeting);
+        setConversationHistory([{ role: 'agent', content: greeting }]);
         
-        // Speak the greeting (now safely inside a user-initiated event)
         setAgentState('speaking');
         await speakText(greeting);
 
-        // Fall through to listening state after speaking
       } catch (err) {
         console.error('Greeting error:', err);
         setError('Could not start the session. Please try again.');
         setAgentState('error');
         setTimeout(() => setAgentState('idle'), 3000);
-        return; // Stop if greeting fails
+        return;
       }
     }
 
     // --- Regular listening logic ---
     try {
       setError(null);
-      setTranscription('');
       setAgentState('listening');
       
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
       
-      // Configure recognition
-      const languageMap: { [key: string]: string } = {
-        'en': 'en-IN',
-        'hi': 'hi-IN',
-        'kn': 'kn-IN'
-      };
-      
+      const languageMap: { [key: string]: string } = { 'en': 'en-IN', 'hi': 'hi-IN', 'kn': 'kn-IN' };
       recognition.lang = languageMap[language] || 'hi-IN';
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
-      recognition.onstart = () => {
-        console.log('Speech recognition started');
-        announceToScreenReader('Listening. Please speak now.');
-      };
-
       recognition.onresult = async (event: any) => {
         const transcript = event.results[0][0].transcript;
-        const confidence = event.results[0][0].confidence;
-        
-        console.log('Transcript:', transcript, 'Confidence:', confidence);
-        setTranscription(transcript);
-        
-        // Process the transcription
         await processTranscription(transcript);
       };
 
       recognition.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
-        
         let errorMessage = 'Speech recognition failed. ';
         switch (event.error) {
-          case 'no-speech':
-            errorMessage += 'No speech detected. Please try again.';
-            break;
-          case 'audio-capture':
-            errorMessage += 'Microphone not accessible.';
-            break;
-          case 'not-allowed':
-            errorMessage += 'Microphone permission denied.';
-            break;
-          default:
-            errorMessage += 'Please try again.';
+          case 'no-speech': errorMessage += 'No speech detected.'; break;
+          case 'audio-capture': errorMessage += 'Microphone not accessible.'; break;
+          case 'not-allowed': errorMessage += 'Microphone permission denied.'; break;
+          default: errorMessage += 'Please try again.';
         }
-        
         setError(errorMessage);
         setAgentState('error');
-        
-        setTimeout(() => {
-          setAgentState('idle');
-        }, 3000);
+        setTimeout(() => setAgentState('idle'), 3000);
       };
 
       recognition.onend = () => {
-        console.log('Speech recognition ended');
-        if (agentState === 'listening') {
-          setAgentState('idle');
-        }
+        if (agentState === 'listening') setAgentState('idle');
       };
 
       recognitionRef.current = recognition;
@@ -172,7 +144,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       
     } catch (err) {
       console.error('Failed to start recognition:', err);
-      setError('Failed to start speech recognition. Please try again.');
+      setError('Failed to start speech recognition.');
       setAgentState('error');
     }
   };
@@ -189,44 +161,31 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       setAgentState('thinking');
       setError(null);
       
-      announceToScreenReader(`I heard: ${text}`);
+      setConversationHistory(prev => [...prev, { role: 'user', content: text }]);
       
-      // Have conversation with agent
       const conversationResponse = await haveConversation(sessionId, text, language);
+      const { agent_response, form_updates, is_complete } = conversationResponse;
       
-      const agentResponse = conversationResponse.agent_response;
-      const formUpdates = conversationResponse.form_updates;
-      const isComplete = conversationResponse.is_complete;
+      setConversationHistory(prev => [...prev, { role: 'agent', content: agent_response }]);
       
-      // Update agent message display
-      setAgentMessage(agentResponse);
-      
-      // Notify parent if form was updated
-      if (formUpdates && Object.keys(formUpdates).length > 0) {
-        announceToScreenReader('Form fields updated automatically');
-        onFormUpdate(formUpdates);
+      if (form_updates && Object.keys(form_updates).length > 0) {
+        onFormUpdate(form_updates);
       }
       
-      // Speak the agent's response
       setAgentState('speaking');
-      await speakText(agentResponse);
+      await speakText(agent_response);
       
-      // If form is complete, notify user
-      if (isComplete) {
-        announceToScreenReader('Your RTI application is complete! You can now download it.');
+      if (is_complete) {
+        announceToScreenReader('Your RTI application is complete!');
       }
       
-      // Return to idle
       setAgentState('idle');
       
     } catch (err) {
       console.error('Processing error:', err);
       setError('Failed to process speech. Please try again.');
       setAgentState('error');
-      
-      setTimeout(() => {
-        setAgentState('idle');
-      }, 3000);
+      setTimeout(() => setAgentState('idle'), 3000);
     }
   };
 
@@ -236,33 +195,14 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       const audio = new Audio(`data:audio/mp3;base64,${audioData.audio}`);
       audioRef.current = audio;
       
-      // Play audio and add a timeout to prevent getting stuck
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          console.warn("Audio playback timed out. Resolving to continue flow.");
-          resolve();
-        }, 15000); // 15-second timeout
-
-        audio.onended = () => {
-          clearTimeout(timeout);
-          resolve();
-        };
-        audio.onerror = (e) => {
-          clearTimeout(timeout);
-          console.error("Audio playback error", e);
-          reject(e); // Reject on error
-        };
-        
-        audio.play().catch(e => {
-          clearTimeout(timeout);
-          console.error("Audio play() failed", e);
-          reject(e); // Reject if play itself fails
-        });
+        const timeout = setTimeout(() => { console.warn("Audio playback timed out."); resolve(); }, 15000);
+        audio.onended = () => { clearTimeout(timeout); resolve(); };
+        audio.onerror = (e) => { clearTimeout(timeout); reject(e); };
+        audio.play().catch(e => { clearTimeout(timeout); reject(e); });
       });
     } catch (err) {
       console.error('TTS or playback error:', err);
-      // We don't re-throw here. If speaking fails, the agent should still
-      // be able to listen for the next command.
     }
   };
 
@@ -273,10 +213,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
     announcement.className = 'sr-only';
     announcement.textContent = message;
     document.body.appendChild(announcement);
-    
-    setTimeout(() => {
-      document.body.removeChild(announcement);
-    }, 1000);
+    setTimeout(() => document.body.removeChild(announcement), 1000);
   };
 
   const isDisabled = agentState === 'thinking' || agentState === 'speaking' || !isSupported;
@@ -284,169 +221,60 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
 
   if (!isSupported) {
     return (
-      <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">⚠️</span>
-          <div>
-            <p className="font-semibold text-yellow-800">Speech Recognition Not Supported</p>
-            <p className="text-yellow-700 text-sm mt-1">
-              Please use Google Chrome or Microsoft Edge browser for voice input.
-            </p>
-          </div>
-        </div>
+      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded">
+        <p className="font-bold">Speech Recognition Not Supported</p>
+        <p>Please use Google Chrome or Microsoft Edge for voice input.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Agent Status Indicator */}
-      <div className="text-center">
-        <div className="inline-flex items-center gap-3 bg-gray-100 px-6 py-3 rounded-full">
-          {/* Status Icon */}
-          <div className={`
-            w-3 h-3 rounded-full
-            ${agentState === 'idle' ? 'bg-gray-400' : ''}
-            ${agentState === 'listening' ? 'bg-red-500 animate-pulse' : ''}
-            ${agentState === 'thinking' ? 'bg-yellow-500 animate-pulse' : ''}
-            ${agentState === 'speaking' ? 'bg-green-500 animate-pulse' : ''}
-            ${agentState === 'error' ? 'bg-red-600' : ''}
-          `}></div>
-          
-          {/* Status Text */}
-          <span className="font-medium text-gray-700">
-            {getStateMessage()}
-          </span>
-        </div>
-      </div>
-
-      {/* Main Voice Button */}
-      <div className="flex flex-col items-center gap-4">
-        <button
-          onClick={isListening ? stopListening : startListening}
-          disabled={isDisabled}
-          className={`
-            relative w-32 h-32 rounded-full text-white font-bold text-xl
-            transition-all duration-300 transform
-            focus:outline-none focus:ring-4 focus:ring-offset-4
-            disabled:opacity-50 disabled:cursor-not-allowed
-            ${!isDisabled && 'hover:scale-110'}
-            ${isListening 
-              ? 'bg-red-600 focus:ring-red-500 shadow-lg shadow-red-500/50' 
-              : 'bg-blue-600 focus:ring-blue-500 shadow-lg shadow-blue-500/50'
-            }
-            ${agentState === 'thinking' && 'animate-pulse'}
-          `}
-          aria-label={isListening ? 'Stop speaking' : 'Start speaking'}
-          aria-pressed={isListening}
-          aria-disabled={isDisabled}
-        >
-          {/* Microphone Icon */}
-          <div className="flex flex-col items-center justify-center">
-            <span className="text-5xl mb-1">
-              {isListening ? '⏸️' : '🎤'}
-            </span>
-            <span className="text-sm font-semibold">
-              {isListening ? 'Stop' : 'Speak'}
-            </span>
-          </div>
-          
-          {/* Pulsing Ring for Listening State */}
-          {isListening && (
-            <div className="absolute inset-0 rounded-full border-4 border-red-400 animate-ping"></div>
-          )}
-        </button>
-
-        {/* Action Text */}
-        <p className="text-gray-600 text-center font-medium">
-          {isListening ? 'Speak now, click to stop' : 'Click to start speaking'}
-        </p>
-      </div>
-
-      {/* Thinking Indicator */}
-      {agentState === 'thinking' && (
-        <div className="text-center py-4" role="status" aria-live="polite">
-          <div className="flex justify-center items-center gap-2">
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-            <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-          </div>
-          <p className="mt-3 text-gray-600 font-medium">Processing and filling form...</p>
-        </div>
-      )}
-
-      {/* Speaking Indicator */}
-      {agentState === 'speaking' && (
-        <div className="text-center py-4" role="status" aria-live="polite">
-          <div className="flex justify-center items-center gap-1">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className="w-1 bg-green-600 rounded-full animate-pulse"
-                style={{
-                  height: `${Math.random() * 20 + 10}px`,
-                  animationDelay: `${i * 100}ms`,
-                }}
-              ></div>
-            ))}
-          </div>
-          <p className="mt-3 text-gray-600 font-medium">Speaking...</p>
-        </div>
-      )}
-
-      {/* Error Message */}
-      {error && (
-        <div 
-          role="alert" 
-          className="bg-red-100 border-l-4 border-red-500 text-red-700 px-4 py-3 rounded"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-xl">⚠️</span>
-            <p className="font-medium">{error}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Transcription Result */}
-      {transcription && (
-        <div 
-          className="bg-gradient-to-r from-blue-50 to-indigo-50 border-l-4 border-blue-500 rounded-lg p-4 shadow-sm"
-          role="region"
-          aria-label="What I heard"
-        >
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">💬</span>
-            <div className="flex-1">
-              <h3 className="font-semibold text-blue-900 mb-1">You said:</h3>
-              <p className="text-gray-800 text-lg leading-relaxed">{transcription}</p>
+    <div className="flex flex-col h-full">
+      {/* Conversation History */}
+      <div className="flex-grow h-96 overflow-y-auto p-4 bg-white border border-neutral-200 rounded-lg space-y-4 mb-4">
+        {conversationHistory.map((msg, index) => (
+          <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-xs md:max-w-md p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-neutral-200 text-neutral-800'}`}>
+              <p className="text-sm">{msg.content}</p>
             </div>
           </div>
-        </div>
-      )}
+        ))}
+        <div ref={conversationEndRef} />
+      </div>
 
-      {/* Agent Response */}
-      {agentMessage && (
-        <div 
-          className="bg-gradient-to-r from-green-50 to-emerald-50 border-l-4 border-green-500 rounded-lg p-4 shadow-sm"
-          role="region"
-          aria-label="Agent response"
-        >
-          <div className="flex items-start gap-3">
-            <span className="text-2xl">🤖</span>
-            <div className="flex-1">
-              <h3 className="font-semibold text-green-900 mb-1">RTI Assistant:</h3>
-              <p className="text-gray-800 text-lg leading-relaxed">{agentMessage}</p>
-            </div>
+      {/* Agent Status & Control */}
+      <div className="flex-shrink-0">
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={isListening ? stopListening : startListening}
+            disabled={isDisabled}
+            className={`
+              flex items-center justify-center w-20 h-20 rounded-full text-white font-bold
+              transition-transform transform focus:outline-none focus:ring-2 focus:ring-offset-2
+              disabled:opacity-60 disabled:cursor-not-allowed
+              ${!isDisabled && 'hover:scale-105'}
+              ${isListening ? 'bg-red-600 focus:ring-red-500' : 'bg-blue-600 focus:ring-blue-500'}
+            `}
+            aria-label={isListening ? 'Stop listening' : 'Start listening'}
+          >
+            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+              {isListening ? (
+                <path d="M5 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />
+              ) : (
+                <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0V4zm1 0a2 2 0 0 1 4 0v6a2 2 0 0 1-4 0V4zm-3 6a1 1 0 0 1 1 1v1a4 4 0 0 0 8 0v-1a1 1 0 1 1 2 0v1a6 6 0 1 1-12 0v-1a1 1 0 0 1 1-1z" />
+              )}
+            </svg>
+          </button>
+          <div className="text-left">
+            <p className="font-semibold text-lg text-neutral-800">{getStateMessage()}</p>
+            <p className="text-neutral-500 text-sm">
+              {isListening ? 'Click the square to stop' : 'Click the mic to speak'}
+            </p>
           </div>
         </div>
-      )}
-
-      {/* Instructions */}
-      <div className="text-center text-sm text-gray-500 bg-gray-50 rounded-lg p-3">
-        <p>
-          🎯 Speak in <strong>{language === 'hi' ? 'Hindi (हिंदी)' : language === 'kn' ? 'Kannada (ಕನ್ನಡ)' : 'English'}</strong>
-        </p>
-        <p className="mt-1">Real-time speech recognition • Auto-fills form • Speaks back to you</p>
+        {error && (
+          <p role="alert" className="text-red-600 text-center text-sm mt-2">{error}</p>
+        )}
       </div>
     </div>
   );

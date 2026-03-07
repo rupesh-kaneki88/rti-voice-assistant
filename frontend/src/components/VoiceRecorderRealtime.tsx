@@ -7,7 +7,7 @@ import { FormData } from '@/app/page'; // Import the shared FormData type
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
-  onFormUpdate: (updates: Partial<FormData>) => void;
+  onFormUpdate: (updates: Partial<FormData> & { mode?: string }) => void;
 }
 
 type AgentState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -152,7 +152,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      setAgentState('thinking');
+      setAgentState('idle');
     }
   };
 
@@ -164,13 +164,12 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       setConversationHistory(prev => [...prev, { role: 'user', content: text }]);
       
       const conversationResponse = await haveConversation(sessionId, text, language);
-      const { agent_response, form_updates, is_complete } = conversationResponse;
+      const { agent_response, form_updates, is_complete, mode } = conversationResponse;
       
       setConversationHistory(prev => [...prev, { role: 'agent', content: agent_response }]);
       
-      if (form_updates && Object.keys(form_updates).length > 0) {
-        onFormUpdate(form_updates);
-      }
+      // Always call onFormUpdate to propagate mode changes
+      onFormUpdate({ ...form_updates, mode });
       
       setAgentState('speaking');
       await speakText(agent_response);

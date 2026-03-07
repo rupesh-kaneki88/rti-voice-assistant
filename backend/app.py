@@ -351,7 +351,8 @@ async def create_session(request: SessionCreate):
             "language": request.language,
             "created_at": datetime.utcnow().isoformat(),
             "form_data": {},
-            "conversation_history": []
+            "conversation_history": [],
+            "mode": "initial"  # Add initial mode
         }
         
         save_session_to_db(session_data)
@@ -403,96 +404,94 @@ async def delete_session(session_id: str):
 @app.post("/session/{session_id}/conversation")
 async def have_conversation(session_id: str, request: ConversationRequest):
     """
-    Have a conversation with the RTI agent
-    This is the main endpoint for conversational interaction
+    Have a conversation with the RTI agent.
+    This is the main endpoint for conversational interaction.
     """
     session_data = get_session_from_db(session_id)
-    
     if not session_data:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     try:
-        # Get conversation history
         conversation_history = session_data.get('conversation_history', [])
         form_data = session_data.get('form_data', {})
-        
-        # If this is the first message, send greeting
-        if not conversation_history:
-            if rti_agent_service and not settings.use_mock_services:
-                greeting = rti_agent_service.get_initial_greeting(request.language)
-            else:
-                greetings = {
-                    'en': "Hello! I'm your RTI assistant. I'll help you file a Right to Information application. What information would you like to request from the government?",
-                    'hi': "नमस्ते! मैं आपका आरटीआई सहायक हूं। मैं आपको सूचना का अधिकार आवेदन दाखिल करने में मदद करूंगा। आप सरकार से कौन सी जानकारी चाहते हैं?",
-                    'kn': "ನಮಸ್ಕಾರ! ನಾನು ನಿಮ್ಮ ಆರ್‌ಟಿಐ ಸಹಾಯಕ. ನಾನು ನಿಮಗೆ ಮಾಹಿತಿ ಹಕ್ಕು ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಸಹಾಯ ಮಾಡುತ್ತೇನೆ. ನೀವು ಸರ್ಕಾರದಿಂದ ಯಾವ ಮಾಹಿತಿಯನ್ನು ವಿನಂತಿಸಲು ಬಯಸುತ್ತೀರಿ?"
-                }
-                greeting = greetings.get(request.language, greetings['en'])
-            
-            # Add greeting to history
-            conversation_history.append({
-                "role": "assistant",
-                "content": greeting
-            })
-            
+        mode = session_data.get('mode', 'initial')
+
+        # Handle the very first call for a session (to get the greeting)
+        if mode == 'initial' and not request.message and not conversation_history:
+            greeting = rti_agent_service.get_initial_greeting(request.language)
+            conversation_history.append({"role": "assistant", "content": greeting})
             session_data['conversation_history'] = conversation_history
             save_session_to_db(session_data)
+            return {"agent_response": greeting, "form_updates": {}, "is_complete": False, "mode": "initial"}
+
+        # Add user message to history now, so it's available for all logic
+        if request.message:
+            conversation_history.append({"role": "user", "content": request.message})
+
+        # If service is mocked, return a simple echo
+        if not rti_agent_service or settings.use_mock_services:
+            response_text = f"Mock response for: {request.message}"
+            conversation_history.append({"role": "assistant", "content": response_text})
+            session_data['conversation_history'] = conversation_history
+            save_session_to_db(session_data)
+            return {"agent_response": response_text, "form_updates": {}, "is_complete": False, "mode": mode}
+
+        # Main logic for different modes
+        if mode == 'initial':
+            # Determine the mode from the user's first real message
+            initial_response = rti_agent_service._handle_initial_mode(request.message, request.language)
+            new_mode = initial_response.get("mode")
             
-            return {
-                "agent_response": greeting,
-                "form_updates": {},
-                "is_complete": False,
-                "conversation_history": conversation_history
-            }
-        
-        # Add user message to history
-        conversation_history.append({
-            "role": "user",
-            "content": request.message
-        })
-        
-        # Get agent response
-        if rti_agent_service and not settings.use_mock_services:
-            response = rti_agent_service.get_agent_response(
+            if new_mode == 'knowledge':
+                # Smart flow: If switching to knowledge, get the answer immediately
+                logger.info("Initial mode switching to 'knowledge', getting immediate answer.")
+                
+                # Get the actual knowledge answer
+                knowledge_response = rti_agent_service._handle_knowledge_mode(request.message, conversation_history, request.language)
+                
+                # The final text is just the direct answer
+                final_text = knowledge_response.get("agent_response", "")
+                
+                # Update history with the direct answer
+                conversation_history.append({"role": "assistant", "content": final_text})
+                
+                # Prepare final response object
+                agent_response_data = {
+                    "agent_response": final_text,
+                    "form_updates": {},
+                    "is_complete": False,
+                    "mode": "knowledge"
+                }
+            else: # Mode is switching to form-filling
+                agent_response_data = initial_response
+                conversation_history.append({"role": "assistant", "content": agent_response_data.get("agent_response")})
+
+        else: # Mode is already 'knowledge' or 'form-filling'
+            agent_response_data = rti_agent_service.get_agent_response(
                 user_message=request.message,
                 conversation_history=conversation_history,
                 form_data=form_data,
-                language=request.language
+                language=request.language,
+                mode=mode
             )
-            
-            agent_message = response['agent_response']
-            form_updates = response['form_updates']
-            is_complete = response['is_complete']
-        else:
-            # Simple mock conversation
-            agent_message = f"I heard you say: {request.message}. Let me help you with that."
-            form_updates = {}
-            is_complete = False
+            conversation_history.append({"role": "assistant", "content": agent_response_data.get("agent_response")})
+
+        # --- Session Saving ---
+        form_updates = agent_response_data.get("form_updates", {})
+        new_mode = agent_response_data.get("mode", mode)
         
-        # Update form data with extracted information
-        if form_updates:
-            for field, value in form_updates.items():
-                form_data[field] = value
-            session_data['form_data'] = form_data
-        
-        # Add agent response to history
-        conversation_history.append({
-            "role": "assistant",
-            "content": agent_message
-        })
-        
-        # Save updated session
+        if 'mode' in form_updates:
+            new_mode = form_updates.pop('mode')
+
         session_data['conversation_history'] = conversation_history
+        session_data['form_data'] = {**form_data, **form_updates}
+        session_data['mode'] = new_mode
         save_session_to_db(session_data)
         
-        logger.info(f"Conversation turn completed for session {session_id}")
+        logger.info(f"Conversation turn completed for session {session_id}. Mode is now: {new_mode}")
         
-        return {
-            "agent_response": agent_message,
-            "form_updates": form_updates,
-            "is_complete": is_complete,
-            "conversation_history": conversation_history[-6:]  # Last 3 exchanges
-        }
-    
+        return agent_response_data
+
     except Exception as e:
         logger.error(f"Conversation error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

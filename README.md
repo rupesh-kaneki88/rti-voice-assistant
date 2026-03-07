@@ -4,13 +4,32 @@ An AI-powered, accessibility-first voice assistant that enables persons with vis
 
 ## Features
 
-- 🗣️ **Multilingual Voice Interaction**: Full conversational support for English, Hindi, and Kannada.
-- ⚡ **High-Speed Responses**: Powered by Groq for near-instantaneous English conversation.
-- 🧠 **Intelligent & Robust**: A smart fallback system (Groq → Gemini → Rule-based) ensures the agent is always responsive.
-- ♿ **Accessibility-First**: Designed for voice-only interaction, with screen reader compatibility and clear audio feedback.
-- 📝 **Guided Form Completion**: The AI agent guides users step-by-step through the RTI application.
-- 📄 **Document Generation**: Generates a submission-ready PDF of the completed RTI application.
-- 🔒 **Privacy Compliant**: Sessions and data are stored temporarily in DynamoDB with a 24-hour TTL.
+- 🗣️ **Dual-Mode RTI Expert**: Acts as both a knowledgeable guide for RTI questions (`Knowledge Mode`) and an efficient assistant for filing applications (`Form-Filling Mode`).
+- 🧠 **Smart Conversational Flow**:
+    - **Initial Choice**: Starts by asking your goal—get information or file an application.
+    - **Seamless Mode Switching**: Just say "let's file an application" to instantly switch from asking questions to filling the form, carrying over the context of your conversation.
+    - **Collaborative Query Drafting**: In form-filling mode, the agent helps you expand your query to make it more detailed and effective.
+- 🌐 **Multilingual Voice Interaction**: Full conversational support for English, Hindi, and Kannada.
+- ⚡ **High-Speed & Robust AI**:
+    - Powered by Groq for near-instantaneous English conversation.
+    - Uses Gemini for superior multilingual understanding.
+    - A smart fallback system (Groq → Gemini → Rule-based) ensures the agent is always responsive.
+- ♿ **Accessibility-First**: Designed for voice-only interaction, with a dynamic UI that adapts to your task.
+- 📄 **PDF Generation**: Generates a submission-ready PDF of the completed RTI application.
+
+---
+
+## How It Works: A Dual-Mode Conversational Agent
+
+The assistant is more than just a form-filler; it's a versatile RTI expert.
+
+1.  **Initial Choice**: The conversation begins with a simple choice: do you want to learn about the RTI Act or start an application?
+
+2.  **Knowledge Mode**: If you choose to learn, you can ask any question about the RTI Act. Our agent, "RTI Sahayak," provides expert answers while staying strictly on topic. The user interface adapts to a clean, full-width chat experience for better readability.
+
+3.  **Form-Filling Mode**: When you're ready to file, the agent guides you through the application step-by-step. It remembers the context of your previous questions and helps you draft a detailed and effective query to the government.
+
+4.  **Seamless Switching**: The magic is in the transition. At any point during a knowledge conversation, just tell the agent you're ready to file (e.g., "Okay, let's create an application based on this"). It will instantly switch to form-filling mode, using the topic of your conversation as the starting point for your application.
 
 ---
 

@@ -45,20 +45,34 @@ pip install -r requirements.txt
 
 ## HOW_IT_ALL_WORKS
 
-The system uses **DynamoDB** to store conversations and automatically fills the form as users speak.
+The system uses **DynamoDB** to store session data, including the conversation history and the current agent mode.
 
-### Conversation Flow
-1.  **User Speaks:** Frontend captures audio, transcribes it, and calls the backend.
-2.  **Backend Processes:**
-    *   Retrieves conversation history from DynamoDB.
-    *   Adds the new user message.
-    *   Extracts form data using the LLM.
-    *   Generates an agent response.
-    *   Saves the updated conversation and form data back to DynamoDB.
-    *   Returns the agent's response and form updates to the frontend.
-3.  **Frontend Updates:**
-    *   Speaks the agent's response using TTS.
-    *   Refreshes the form to display the auto-filled data.
+### Conversation Flow & Agent Modes
+
+The agent operates in one of three modes: `initial`, `knowledge`, or `form-filling`. This creates a flexible and intuitive user experience.
+
+#### 1. Initial Mode
+- **Trigger:** A new session starts in this mode.
+- **Agent's Action:** The agent asks the user to choose a path: get information or create an application.
+- **User's Action:** Respond with your choice (e.g., "I want to know about RTI" or "Let's start an application").
+
+#### 2. Knowledge Mode
+- **Trigger:** The user chooses to "get information".
+- **Agent's Action:** The agent acts as a specialized "RTI Sahayak".
+    - It answers questions strictly related to the RTI Act.
+    - It will politely decline to answer off-topic questions.
+    - It will **not** try to fill any form fields.
+    - The frontend UI adapts to a full-screen chat experience.
+- **User's Action:** Ask any question about the RTI process, rules, or definitions.
+- **Switching to Form-Filling:** At any time, you can say "Okay, let's file an application about this" to seamlessly switch modes. The agent will use the context of your questions to start the application.
+
+#### 3. Form-Filling Mode
+- **Trigger:** The user chooses to "create an application" or switches from `knowledge` mode.
+- **Agent's Action:**
+    - The agent guides you step-by-step through the RTI form.
+    - It helps you collaboratively draft a detailed and effective query for the `information_sought` field.
+    - It asks for one piece of information at a time until the form is complete.
+- **User's Action:** Answer the agent's questions to fill the form.
 
 ### Key Files
 *   **Backend:** `app.py`, `services/rti_agent_service.py`, `shared/aws_clients.py`

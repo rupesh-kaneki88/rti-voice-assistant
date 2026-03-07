@@ -21,6 +21,7 @@ export default function Home() {
   const [formData, setFormData] = useState<FormData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState('initial'); // Add mode state
 
   useEffect(() => {
     initSession();
@@ -30,9 +31,9 @@ export default function Home() {
     try {
       setIsLoading(true);
       setError(null);
+      setMode('initial'); // Reset mode on new session
       const session = await createSession(language);
       setSessionId(session.session_id);
-      // Also fetch initial form data for the new session
       const initialForm = await getForm(session.session_id);
       setFormData(initialForm.form_data || {});
     } catch (err) {
@@ -44,9 +45,20 @@ export default function Home() {
   };
 
   // This function will be passed to the voice component to update the state
-  const handleFormUpdate = (updates: Partial<FormData>) => {
-    setFormData(prevData => ({ ...prevData, ...updates }));
+  const handleFormUpdate = (updates: Partial<FormData> & { mode?: string }) => {
+    if (updates.mode && updates.mode !== mode) {
+      setMode(updates.mode);
+    }
+    // Create a new object without the mode property to avoid adding it to formData
+    const formUpdates = { ...updates };
+    delete formUpdates.mode;
+    
+    setFormData(prevData => ({ ...prevData, ...formUpdates }));
   };
+
+  const mainContentGridClass = mode === 'form-filling' 
+    ? "grid grid-cols-1 lg:grid-cols-2 gap-8" 
+    : "grid grid-cols-1 gap-8";
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -68,9 +80,7 @@ export default function Home() {
           <div className="max-w-md mx-auto mb-8">
             <LanguageSelector
               currentLanguage={language}
-              onLanguageChange={(lang) => {
-                setLanguage(lang);
-              }}
+              onLanguageChange={(lang) => setLanguage(lang)}
             />
           </div>
 
@@ -88,7 +98,7 @@ export default function Home() {
           {/* Loading State */}
           {isLoading && (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-brand-blue-light"></div>
+              <div className="inline-block animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-600"></div>
               <p className="mt-6 text-lg font-semibold text-neutral-600">
                 Initializing your secure session...
               </p>
@@ -97,35 +107,40 @@ export default function Home() {
 
           {/* Main Content */}
           {sessionId && !isLoading && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className={mainContentGridClass}>
               {/* Voice Recorder */}
-              <section aria-labelledby="voice-section-title" className="card">
-                <div className="p-6">
-                  <h2 id="voice-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
+              <section 
+                aria-labelledby="voice-section-title" 
+                className={`card ${mode !== 'form-filling' ? 'lg:col-span-2' : ''}`}
+              >
+                <div className="p-6 h-full flex flex-col">
+                  <h2 id="voice-section-title" className="text-2xl font-bold text-neutral-900 mb-4 flex-shrink-0">
                     Voice Interaction
                   </h2>
                   <VoiceRecorderRealtime 
                     sessionId={sessionId} 
                     language={language}
-                    onFormUpdate={handleFormUpdate} // Pass the update function
+                    onFormUpdate={handleFormUpdate}
                   />
                 </div>
               </section>
 
-              {/* RTI Form */}
-              <section aria-labelledby="form-section-title" className="card">
-                <div className="p-6">
-                  <h2 id="form-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
-                    RTI Application
-                  </h2>
-                  <RTIForm 
-                    sessionId={sessionId} 
-                    language={language}
-                    initialData={formData} // Pass the form data down
-                    onLocalUpdate={handleFormUpdate} // Allow form to update state too
-                  />
-                </div>
-              </section>
+              {/* RTI Form (Conditional) */}
+              {mode === 'form-filling' && (
+                <section aria-labelledby="form-section-title" className="card">
+                  <div className="p-6">
+                    <h2 id="form-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
+                      RTI Application
+                    </h2>
+                    <RTIForm 
+                      sessionId={sessionId} 
+                      language={language}
+                      initialData={formData}
+                      onLocalUpdate={handleFormUpdate}
+                    />
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </div>

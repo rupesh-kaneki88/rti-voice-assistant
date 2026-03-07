@@ -2,14 +2,16 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { textToSpeech, haveConversation } from '@/lib/api';
+import { FormData } from '@/app/page'; // Import the shared FormData type
 
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
-  onFormDataExtracted?: () => void;
+  onFormUpdate: (updates: Partial<FormData>) => void;
 }
 
 type AgentState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+
 
 // Declare Web Speech API types
 declare global {
@@ -19,7 +21,7 @@ declare global {
   }
 }
 
-export default function VoiceRecorderRealtime({ sessionId, language, onFormDataExtracted }: VoiceRecorderProps) {
+export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdate }: VoiceRecorderProps) {
   const [agentState, setAgentState] = useState<AgentState>('idle');
   const [transcription, setTranscription] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -40,34 +42,24 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormDataE
   }, []);
 
   useEffect(() => {
-    // Send initial greeting when component mounts
-    const sendGreeting = async () => {
-      if (!hasGreetedRef.current && sessionId) {
-        hasGreetedRef.current = true;
+    // On language change, if we have already greeted, fetch the new guidance message to display
+    const updateGuidanceOnLanguageChange = async () => {
+      if (hasGreetedRef.current && sessionId) {
         try {
-          setAgentState('thinking');
           const response = await haveConversation(sessionId, '', language);
-          const greeting = response.agent_response;
-          setAgentMessage(greeting);
-          
-          // Speak the greeting
-          setAgentState('speaking');
-          await speakText(greeting);
-          setAgentState('idle');
+          setAgentMessage(response.agent_response);
         } catch (err) {
-          console.error('Greeting error:', err);
-          setAgentState('idle');
+          console.error('Guidance update error:', err);
         }
       }
     };
-    
-    sendGreeting();
-  }, [sessionId, language]);
+    updateGuidanceOnLanguageChange();
+  }, [language]);
 
   const getStateMessage = () => {
     switch (agentState) {
       case 'idle':
-        return 'Ready to listen';
+        return hasGreetedRef.current ? 'Ready to listen' : 'Click Speak to start';
       case 'listening':
         return 'Listening... Speak now';
       case 'thinking':
@@ -81,7 +73,31 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormDataE
     }
   };
 
-  const startListening = () => {
+  const startListening = async () => {
+    // First interaction: Greet the user, then start listening
+    if (!hasGreetedRef.current && sessionId) {
+      hasGreetedRef.current = true;
+      try {
+        setAgentState('thinking');
+        const response = await haveConversation(sessionId, '', language);
+        const greeting = response.agent_response;
+        setAgentMessage(greeting);
+        
+        // Speak the greeting (now safely inside a user-initiated event)
+        setAgentState('speaking');
+        await speakText(greeting);
+
+        // Fall through to listening state after speaking
+      } catch (err) {
+        console.error('Greeting error:', err);
+        setError('Could not start the session. Please try again.');
+        setAgentState('error');
+        setTimeout(() => setAgentState('idle'), 3000);
+        return; // Stop if greeting fails
+      }
+    }
+
+    // --- Regular listening logic ---
     try {
       setError(null);
       setTranscription('');
@@ -188,9 +204,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormDataE
       // Notify parent if form was updated
       if (formUpdates && Object.keys(formUpdates).length > 0) {
         announceToScreenReader('Form fields updated automatically');
-        if (onFormDataExtracted) {
-          onFormDataExtracted();
-        }
+        onFormUpdate(formUpdates);
       }
       
       // Speak the agent's response
@@ -219,19 +233,36 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormDataE
   const speakText = async (text: string) => {
     try {
       const audioData = await textToSpeech(text, language);
-      
-      // Convert base64 to audio and play
       const audio = new Audio(`data:audio/mp3;base64,${audioData.audio}`);
       audioRef.current = audio;
       
-      // Wait for audio to finish
-      await new Promise((resolve, reject) => {
-        audio.onended = resolve;
-        audio.onerror = reject;
-        audio.play();
+      // Play audio and add a timeout to prevent getting stuck
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          console.warn("Audio playback timed out. Resolving to continue flow.");
+          resolve();
+        }, 15000); // 15-second timeout
+
+        audio.onended = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        audio.onerror = (e) => {
+          clearTimeout(timeout);
+          console.error("Audio playback error", e);
+          reject(e); // Reject on error
+        };
+        
+        audio.play().catch(e => {
+          clearTimeout(timeout);
+          console.error("Audio play() failed", e);
+          reject(e); // Reject if play itself fails
+        });
       });
     } catch (err) {
-      console.error('TTS error:', err);
+      console.error('TTS or playback error:', err);
+      // We don't re-throw here. If speaking fails, the agent should still
+      // be able to listen for the next command.
     }
   };
 

@@ -4,11 +4,21 @@ import { useState, useEffect } from 'react';
 import VoiceRecorderRealtime from '@/components/VoiceRecorderRealtime';
 import RTIForm from '@/components/RTIForm';
 import LanguageSelector from '@/components/LanguageSelector';
-import { createSession } from '@/lib/api';
+import { createSession, getForm } from '@/lib/api';
+
+// Define FormData type to be shared
+export interface FormData {
+  applicant_name?: string;
+  address?: string;
+  information_sought?: string;
+  department?: string;
+  reason?: string;
+}
 
 export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [language, setLanguage] = useState<'en' | 'hi' | 'kn'>('hi');
+  const [formData, setFormData] = useState<FormData>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,12 +32,20 @@ export default function Home() {
       setError(null);
       const session = await createSession(language);
       setSessionId(session.session_id);
+      // Also fetch initial form data for the new session
+      const initialForm = await getForm(session.session_id);
+      setFormData(initialForm.form_data || {});
     } catch (err) {
       setError('Failed to create session. Please refresh the page to try again.');
       console.error('Session creation error:', err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // This function will be passed to the voice component to update the state
+  const handleFormUpdate = (updates: Partial<FormData>) => {
+    setFormData(prevData => ({ ...prevData, ...updates }));
   };
 
   return (
@@ -52,7 +70,6 @@ export default function Home() {
               currentLanguage={language}
               onLanguageChange={(lang) => {
                 setLanguage(lang);
-                // The useEffect will trigger initSession
               }}
             />
           </div>
@@ -90,10 +107,7 @@ export default function Home() {
                   <VoiceRecorderRealtime 
                     sessionId={sessionId} 
                     language={language}
-                    onFormDataExtracted={() => {
-                      // Trigger form refresh when data is extracted
-                      window.dispatchEvent(new CustomEvent('refreshForm'));
-                    }}
+                    onFormUpdate={handleFormUpdate} // Pass the update function
                   />
                 </div>
               </section>
@@ -104,7 +118,12 @@ export default function Home() {
                   <h2 id="form-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
                     RTI Application
                   </h2>
-                  <RTIForm sessionId={sessionId} language={language} />
+                  <RTIForm 
+                    sessionId={sessionId} 
+                    language={language}
+                    initialData={formData} // Pass the form data down
+                    onLocalUpdate={handleFormUpdate} // Allow form to update state too
+                  />
                 </div>
               </section>
             </div>

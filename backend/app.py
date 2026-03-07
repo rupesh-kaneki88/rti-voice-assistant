@@ -205,15 +205,11 @@ async def health():
 @app.post("/voice/transcribe", response_model=TranscribeResponse)
 async def transcribe_audio(request: TranscribeRequest):
     """
-    Transcribe audio to text
-    
-    Note: Using mock transcription for speed. AWS Transcribe takes 30-60 seconds.
-    For production, integrate real-time transcription service.
+    Transcribe audio to text using AWS Transcribe Streaming with a Whisper fallback.
     """
     try:
         logger.info(f"Transcription request: language={request.language}")
         
-        # Validate language
         if request.language not in settings.supported_languages:
             raise HTTPException(
                 status_code=400,
@@ -229,20 +225,33 @@ async def transcribe_audio(request: TranscribeRequest):
                 status_code=400,
                 detail="Invalid audio encoding. Must be base64."
             )
-        
-        # For hackathon: Use mock transcriptions (AWS Transcribe is too slow - 30-60s)
-        # In production, use real-time transcription service or IndicWhisper
-        mock_transcriptions = {
-            'en': 'I want to file an RTI application to know about government spending on education',
-            'hi': 'मैं शिक्षा पर सरकारी खर्च के बारे में जानने के लिए आरटीआई आवेदन दाखिल करना चाहता हूं',
-            'kn': 'ನಾನು ಶಿಕ್ಷಣದ ಮೇಲೆ ಸರ್ಕಾರದ ಖರ್ಚಿನ ಬಗ್ಗೆ ತಿಳಿಯಲು ಆರ್‌ಟಿಐ ಅರ್ಜಿ ಸಲ್ಲಿಸಲು ಬಯಸುತ್ತೇನೆ'
-        }
+
+        if not transcribe_service or settings.use_mock_services:
+            logger.warning("Using mock transcription because real service is disabled.")
+            # You can keep a simple mock for testing if you want
+            mock_transcriptions = {
+                'en': 'This is a mock transcription for testing.',
+                'hi': 'यह परीक्षण के लिए एक नकली प्रतिलेखन है।',
+                'kn': 'ಇದು ಪರೀಕ್ಷೆಗಾಗಿ ಅಣಕು ಪ್ರತಿಲೇಖನವಾಗಿದೆ.'
+            }
+            return TranscribeResponse(
+                text=mock_transcriptions.get(request.language, "Mock response."),
+                confidence=0.99,
+                language=request.language,
+                mode="mock"
+            )
+
+        # Use the real-time transcription service
+        transcribed_text = await transcribe_service.transcribe_audio(
+            audio_bytes=audio_bytes,
+            language=request.language
+        )
         
         return TranscribeResponse(
-            text=mock_transcriptions[request.language],
-            confidence=0.95,
+            text=transcribed_text,
+            confidence=0.95,  # Whisper fallback doesn't provide a simple confidence score
             language=request.language,
-            mode="mock_fast"
+            mode="realtime_asr"
         )
     
     except HTTPException:

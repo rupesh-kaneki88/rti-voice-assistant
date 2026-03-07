@@ -31,114 +31,79 @@ class RTIAgentService:
         if not self.groq.is_available() and not self.gemini.is_available():
             logger.warning("⚠ No LLM providers available - using rule-based fallback only")
 
-    def _get_rule_based_response(self, user_message, form_data, language):
-        """Generate a rule-based response when LLM providers are unavailable."""
-        # This is a simplified fallback. The more detailed rule-based logic follows.
-        logger.info("Using simplified rule-based response as LLMs are offline.")
-        return "Our AI is currently unavailable. Please try again later."
-    
     def get_agent_response(self, user_message: str, conversation_history: list, form_data: dict, language: str = 'en') -> dict:
         """
-        Get agent response based on conversation context
-        
-        Args:
-            user_message: User's current message
-            conversation_history: List of previous messages
-            form_data: Current form data
-            language: Language code
-            
-        Returns:
-            Dict with agent_response, next_question, form_updates, is_complete
+        Get agent response based on conversation context.
+        The LLM is tasked with returning a JSON object containing the response and form updates.
         """
+        logger.info("="*50)
+        logger.info(f"User message: {user_message}")
+        logger.info(f"Current form data: {json.dumps(form_data, indent=2)}")
+        logger.info("="*50)
+        
         try:
-            # Extract form updates from user message first
-            form_updates = self._extract_form_updates(user_message, form_data)
+            llm_response_str = None
             
-            # Update form_data with new updates for context
-            updated_form_data = {**form_data, **form_updates}
-            
-            # Try to use LLM providers with conditional switching
-            agent_message = None
-            
-            # Conditional switching: Use Gemini for Hindi/Kannada, Groq for English
+            primary_provider = None
+            fallback_provider = None
+
             if language in ["hi", "kn"]:
-                # Prefer Gemini for Indian languages
-                if self.gemini.is_available():
-                    try:
-                        agent_message = self._generate_with_llm(
-                            self.gemini,
-                            user_message,
-                            conversation_history,
-                            updated_form_data,
-                            language
-                        )
-                    except Exception as e:
-                        logger.warning(f"Gemini failed: {e}, trying Groq...")
-                        if self.groq.is_available():
-                            try:
-                                agent_message = self._generate_with_llm(
-                                    self.groq,
-                                    user_message,
-                                    conversation_history,
-                                    updated_form_data,
-                                    language
-                                )
-                            except Exception as e2:
-                                logger.warning(f"Groq also failed: {e2}")
-                elif self.groq.is_available():
-                    try:
-                        agent_message = self._generate_with_llm(
-                            self.groq,
-                            user_message,
-                            conversation_history,
-                            updated_form_data,
-                            language
-                        )
-                    except Exception as e:
-                        logger.warning(f"Groq failed: {e}")
+                primary_provider = self.gemini if self.gemini.is_available() else self.groq
+                fallback_provider = self.groq if primary_provider == self.gemini and self.groq.is_available() else None
             else:
-                # Prefer Groq for English
-                if self.groq.is_available():
-                    try:
-                        agent_message = self._generate_with_llm(
-                            self.groq,
-                            user_message,
-                            conversation_history,
-                            updated_form_data,
-                            language
-                        )
-                    except Exception as e:
-                        logger.warning(f"Groq failed: {e}, trying Gemini...")
-                        if self.gemini.is_available():
-                            try:
-                                agent_message = self._generate_with_llm(
-                                    self.gemini,
-                                    user_message,
-                                    conversation_history,
-                                    updated_form_data,
-                                    language
-                                )
-                            except Exception as e2:
-                                logger.warning(f"Gemini also failed: {e2}")
-                elif self.gemini.is_available():
-                    try:
-                        agent_message = self._generate_with_llm(
-                            self.gemini,
-                            user_message,
-                            conversation_history,
-                            updated_form_data,
-                            language
-                        )
-                    except Exception as e:
-                        logger.warning(f"Gemini failed: {e}")
+                primary_provider = self.groq if self.groq.is_available() else self.gemini
+                fallback_provider = self.gemini if primary_provider == self.groq and self.gemini.is_available() else None
+
+            llm_response_str = None
             
-            # Fallback to rule-based if all LLMs fail
-            if not agent_message:
-                logger.info("Using rule-based fallback")
-                agent_message = self._get_rule_based_response(user_message, updated_form_data, language)
+            if primary_provider:
+                try:
+                    logger.info(f"Attempting to generate response with primary provider: {primary_provider.name}")
+                    llm_response_str = self._generate_with_llm(
+                        primary_provider,
+                        user_message,
+                        conversation_history,
+                        form_data,
+                        language
+                    )
+                except Exception as e:
+                    logger.error(f"Primary LLM provider {primary_provider.name} failed: {e}", exc_info=True)
+                    
+                    if fallback_provider:
+                        try:
+                            logger.info(f"Attempting to generate response with fallback provider: {fallback_provider.name}")
+                            llm_response_str = self._generate_with_llm(
+                                fallback_provider,
+                                user_message,
+                                conversation_history,
+                                form_data,
+                                language
+                            )
+                        except Exception as fallback_e:
+                            logger.error(f"Fallback LLM provider {fallback_provider.name} failed: {fallback_e}", exc_info=True)
+                            llm_response_str = None  # Ensure it's None if fallback also fails
             
-            # Check if form is complete
-            is_complete = self._check_form_complete(updated_form_data)
+            # Initialize default values
+            agent_message = "I'm sorry, I had trouble understanding that. Could you please rephrase?"
+            form_updates = {}
+
+            if llm_response_str:
+                try:
+                    cleaned_response = self._clean_llm_response(llm_response_str)
+                    # The LLM's entire response should be a JSON string
+                    llm_json = json.loads(cleaned_response)
+                    agent_message = llm_json.get("agent_response", agent_message)
+                    form_updates = llm_json.get("form_updates", {})
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to decode LLM JSON response: {llm_response_str}")
+                    # If JSON is bad, we keep the default error message
+            else:
+                # Fallback to rule-based if all LLMs fail
+                logger.info("Using rule-based fallback as no LLM was available or all failed.")
+                agent_message = self._get_rule_based_response(user_message, form_data, language)
+
+            final_form_data = {**form_data, **form_updates}
+            is_complete = self._check_form_complete(final_form_data)
             
             return {
                 "agent_response": agent_message,
@@ -148,8 +113,17 @@ class RTIAgentService:
             }
         
         except Exception as e:
-            logger.error(f"Agent error: {e}", exc_info=True)
+            logger.error(f"Agent error in get_agent_response: {e}", exc_info=True)
             raise
+
+    def _clean_llm_response(self, response_str: str) -> str:
+        """Cleans the LLM response by removing markdown code blocks."""
+        cleaned_str = response_str.strip()
+        if cleaned_str.startswith("```json"):
+            cleaned_str = cleaned_str[7:]
+        if cleaned_str.endswith("```"):
+            cleaned_str = cleaned_str[:-3]
+        return cleaned_str.strip()
     
     def _generate_with_llm(
         self,
@@ -160,49 +134,33 @@ class RTIAgentService:
         language: str
     ) -> str:
         """Generate response using an LLM provider"""
-        # Build messages for LLM
         messages = []
+        for msg in conversation_history[-10:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": user_message})
         
-        # Add conversation history (last 3 exchanges)
-        for msg in conversation_history[-6:]:
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"]
-            })
-        
-        # Add current user message
-        messages.append({
-            "role": "user",
-            "content": user_message
-        })
-        
-        # Get system prompt
         system_prompt = self._get_system_prompt(language, form_data)
         
-        # Generate response
-        logger.info(f"Generating with {provider.name} for language={language}")
+        # logger.info("--- Sending to LLM ---")
+        # logger.info(f"System Prompt:\n{system_prompt}")
+        # logger.info(f"Messages:\n{json.dumps(messages, indent=2)}")
+        # logger.info("-----------------------")
+
         response = provider.generate(
             messages=messages,
             system_prompt=system_prompt,
-            max_tokens=300,  # Keep responses short
-            temperature=0.7
+            max_tokens=500,  # Increased for JSON structure
+            temperature=0.5  # Reduced for more predictable JSON
         )
+        
+        logger.info("--- LLM Response ---")
+        logger.info(response)
+        logger.info("--------------------")
         
         return response
     
     def _get_system_prompt(self, language: str, form_data: dict) -> str:
         """Get strict system prompt for the agent"""
-        
-        # Check what's missing
-        missing_fields = []
-        if not form_data.get('applicant_name'):
-            missing_fields.append('name')
-        if not form_data.get('address'):
-            missing_fields.append('address')
-        if not form_data.get('information_sought'):
-            missing_fields.append('information they want')
-        if not form_data.get('department'):
-            missing_fields.append('government department')
         
         language_instructions = {
             'en': {
@@ -212,20 +170,7 @@ class RTIAgentService:
             'hi': {
                 'lang': 'Hindi',
                 'role': 'आप भारत में उपयोगकर्ताओं को आरटीआई आवेदन दाखिल करने में मदद करने वाली एक महिला आरटीआई सहायक हैं।',
-                'gender': '''
-                    महत्वपूर्ण व्याकरण नियम:
-                    - आप एक महिला सहायक हैं।
-                    - हमेशा स्त्रीलिंग (female grammar) का उपयोग करें।
-                    - उदाहरण:
-                    - "मैं आपकी मदद कर रही हूँ"
-                    - "मैं जानकारी एकत्र कर रही हूँ"
-                    - "मैं आपका आवेदन तैयार कर रही हूँ"
-
-                    गलत उदाहरण (कभी उपयोग न करें):
-                    - "मैं आपकी मदद कर रहा हूँ"
-                    - "मैं बता रहा हूँ"
-                    - "मैं कर रहा हूँ"
-                    '''
+                'gender': 'आप एक महिला सहायक हैं। अपनी प्रतिक्रियाओं में स्त्री व्याकरण का प्रयोग करें (उदाहरण: "कर रही हूँ" कहें, "कर रहा हूँ" नहीं)।'
             },
             'kn': {
                 'lang': 'Kannada',
@@ -234,44 +179,76 @@ class RTIAgentService:
         }
         
         lang_info = language_instructions.get(language, language_instructions['en'])
-        
-        # Add gender instruction if present
         gender_instruction = lang_info.get('gender', '')
         
+        # Department suggestion logic
+        department_suggestions = []
+        if form_data.get('information_sought') and not form_data.get('department'):
+            category = detect_category(form_data['information_sought'])
+            if category != 'general':
+                department_suggestions = get_suggested_departments(category, language)
+
+        suggestion_prompt = ""
+        if department_suggestions:
+            suggestions_str = ", ".join(f'"{d}"' for d in department_suggestions)
+            suggestion_prompt = f"""
+USER NEEDS HELP WITH THE DEPARTMENT.
+Based on their request, here are some suggested departments: {suggestions_str}.
+Ask the user to confirm one of these, or provide a different one. For example: 'It seems your query is related to education. Should I address it to the Ministry of Education, or another department?'
+"""
+
         prompt = f"""{lang_info['role']}
 {gender_instruction}
 
-CRITICAL RULES - YOU MUST FOLLOW THESE:
-1. Respond ONLY in {lang_info['lang']} language
-2. Ask ONLY ONE question at a time
-3. Keep your response under 3 sentences
-4. NEVER give legal advice - only help collect information
-5. Focus ONLY on collecting missing form fields
-6. Be conversational but brief
-7. Do NOT explain RTI Act unless asked
-8. Do NOT provide examples unless asked
-9. If responding in Hindi, ALWAYS use feminine grammar like "कर रही हूँ", never "कर रहा हूँ".
+CRITICAL RULES:
+1. Your primary goal is to collect information for the form by asking one question at a time.
+2. You MUST respond with a valid JSON object. No other text or explanation.
+3. The JSON object must have two keys: "agent_response" (your conversational reply) and "form_updates" (a JSON object of fields you have updated).
+4. Keep your "agent_response" under 3 sentences.
+5. If responding in Hindi, ALWAYS use feminine grammar (e.g., "कर रही हूँ").
+
+CONVERSATION FLOW:
+- Your default mode is to be efficient. When the user provides information, update the form and IMMEDIATELY ask the next unanswered question.
+- **If the user doesn't know the department, use the suggestions provided below to help them.**
+- ONLY enter a "correction" mode if the user's message explicitly indicates a mistake (e.g., "no", "wrong", "change", "update", "correct that").
+- In correction mode, ask for clarification, update the field, and confirm the change before proceeding.
 
 CURRENT FORM STATUS:
 {json.dumps(form_data, indent=2, ensure_ascii=False)}
-
-MISSING INFORMATION: {', '.join(missing_fields) if missing_fields else 'None - form is complete!'}
-
+{suggestion_prompt}
 YOUR TASK:
-- If information is missing, ask for the NEXT missing field only
-- If user provides information, acknowledge briefly and ask for next field
-- If form is complete, confirm and offer to generate PDF
-- Keep responses SHORT and FOCUSED
+Based on the user's message and the conversation flow, generate the JSON output.
 
-CONVERSATION FLOW:
-1. information_sought (what they want to know)
-2. department (which government department)
-3. applicant_name (their name)
-4. address (their address)
-5. Confirm and generate PDF
+EXAMPLE 1: User provides new information (Efficient Flow).
+User message: "I want to know about the budget for street lights"
+Your JSON output:
+{{
+  "agent_response": "Thank you. It looks like your request is about transport. Should I send this to the Ministry of Road Transport and Highways, or do you have a different department in mind?",
+  "form_updates": {{
+    "information_sought": "I want to know about the budget for street lights"
+  }}
+}}
 
-Remember: ONE question, under 3 sentences, {lang_info['lang']} only, no legal advice."""
+EXAMPLE 2: User provides the next piece of information.
+User message: "The Ministry of Urban Development"
+Your JSON output:
+{{
+  "agent_response": "Got it. What is your full name?",
+  "form_updates": {{
+    "department": "The Ministry of Urban Development"
+  }}
+}}
 
+EXAMPLE 3: User wants to make a correction.
+User message: "No, the department is wrong, it should be the local municipal corporation"
+Your JSON output:
+{{
+  "agent_response": "My mistake. I've updated the department to 'local municipal corporation'. Is this correct?",
+  "form_updates": {{
+    "department": "local municipal corporation"
+  }}
+}}
+"""
         return prompt
     
     def _build_context(self, form_data: dict, language: str) -> str:
@@ -288,64 +265,6 @@ Remember: ONE question, under 3 sentences, {lang_info['lang']} only, no legal ad
             context_parts.append(f"Address: {form_data['address']}")
         
         return "\n".join(context_parts) if context_parts else "No information collected yet"
-    
-    def _extract_form_updates(self, user_message: str, current_form_data: dict) -> dict:
-        """Extract form field updates from user message"""
-        updates = {}
-        
-        message_lower = user_message.lower()
-        
-        # Detect category and suggest department
-        if not current_form_data.get('department'):
-            category = detect_category(user_message)
-            if category != "general":
-                suggested_depts = get_suggested_departments(category, 'en')
-                if suggested_depts:
-                    updates['department'] = suggested_depts[0]
-        
-        # Check for department mentions
-        departments = ['education', 'health', 'transport', 'finance', 'agriculture', 
-                      'शिक्षा', 'स्वास्थ्य', 'परिवहन', 'वित्त']
-        for dept in departments:
-            if dept in message_lower:
-                if 'education' in message_lower or 'शिक्षा' in message_lower:
-                    updates['department'] = 'Ministry of Education'
-                elif 'health' in message_lower or 'स्वास्थ्य' in message_lower:
-                    updates['department'] = 'Ministry of Health'
-                elif 'transport' in message_lower or 'परिवहन' in message_lower:
-                    updates['department'] = 'Ministry of Road Transport and Highways'
-                break
-        
-        # Extract name if mentioned
-        name_patterns = ['my name is', 'i am', 'मेरा नाम', 'मैं', 'ನನ್ನ ಹೆಸರು']
-        for pattern in name_patterns:
-            if pattern in message_lower:
-                # Extract name after pattern
-                parts = user_message.split(pattern, 1)
-                if len(parts) > 1:
-                    name = parts[1].strip().split('.')[0].split(',')[0]
-                    if name and len(name) < 50:
-                        updates['applicant_name'] = name
-                break
-        
-        # Extract address if mentioned
-        address_patterns = ['address', 'live at', 'residing at', 'पता', 'ವಿಳಾಸ']
-        for pattern in address_patterns:
-            if pattern in message_lower:
-                # Extract address after pattern
-                parts = user_message.split(pattern, 1)
-                if len(parts) > 1:
-                    address = parts[1].strip()
-                    if address and len(address) > 5:
-                        updates['address'] = address
-                break
-        
-        # If message is long and no specific field identified, it might be information_sought
-        if len(user_message.split()) > 5 and not current_form_data.get('information_sought'):
-            if not any(word in message_lower for word in ['my name is', 'मेरा नाम', 'i am', 'मैं', 'address', 'पता']):
-                updates['information_sought'] = user_message
-        
-        return updates
     
     def _check_form_complete(self, form_data: dict) -> bool:
         """Check if all required fields are filled"""

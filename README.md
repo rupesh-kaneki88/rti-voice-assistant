@@ -4,155 +4,99 @@ An AI-powered, accessibility-first voice assistant that enables persons with vis
 
 ## Features
 
-- 🗣️ **Multilingual Voice Interaction**: English, Hindi, and Kannada support
-- ♿ **Accessibility-First**: Screen reader compatible, keyboard navigation, voice-first UI
-- 📝 **Guided RTI Form Completion**: Step-by-step assistance with legal simplification
-- 📄 **Document Generation**: Submission-ready PDF and text formats
-- 🔒 **Privacy Compliant**: DPDPA 2023 compliant with 24-hour data retention
-- 💾 **Auto-Save**: Session management with progress persistence
+- 🗣️ **Multilingual Voice Interaction**: Full conversational support for English, Hindi, and Kannada.
+- ⚡ **High-Speed Responses**: Powered by Groq for near-instantaneous English conversation.
+- 🧠 **Intelligent & Robust**: A smart fallback system (Groq → Gemini → Rule-based) ensures the agent is always responsive.
+- ♿ **Accessibility-First**: Designed for voice-only interaction, with screen reader compatibility and clear audio feedback.
+- 📝 **Guided Form Completion**: The AI agent guides users step-by-step through the RTI application.
+- 📄 **Document Generation**: Generates a submission-ready PDF of the completed RTI application.
+- 🔒 **Privacy Compliant**: Sessions and data are stored temporarily in DynamoDB with a 24-hour TTL.
 
-## Architecture
+---
 
-### Tech Stack
+## Our Journey: From an All-AWS Plan to a Faster, More Robust Hybrid Approach
 
-- **Frontend**: Next.js (TypeScript) on AWS Amplify
-- **Backend**: AWS Lambda (Python 3.11+)
-- **LLM**: Amazon Bedrock (Claude 3 Haiku)
-- **Speech-to-Text**: AI4Bharat IndicWhisper (containerized Lambda)
-- **Text-to-Speech**: AWS Polly (Hindi/English) + gTTS (Kannada)
-- **Database**: Amazon DynamoDB (sessions with TTL)
-- **Storage**: Amazon S3 (documents with lifecycle policies)
-- **API**: AWS API Gateway (REST/WebSocket)
-- **Monitoring**: CloudWatch Logs + X-Ray
+For the hackathon community, we wanted to share a transparent look at our architectural evolution. Our journey highlights key challenges in rapid prototyping and how we pivoted to create a better, more resilient application.
 
-### AWS Services
+### The Initial Plan: An All-AWS Architecture
+Our initial goal was to build the entire application using AWS services. The core of our AI logic was planned around **AWS Bedrock (with Claude 3 Haiku)**. We also intended to use AWS Polly for all Text-to-Speech (TTS) needs.
 
-- Amazon Bedrock - Legal reasoning and simplification
-- AWS Lambda - Serverless compute
-- DynamoDB - Session state with 24h TTL
-- S3 - Temporary document storage
-- API Gateway - REST/WebSocket APIs
-- AWS Polly - Text-to-speech
-- CloudWatch - Logging and monitoring
-- AWS Amplify - Frontend hosting
-- AWS KMS - Encryption
+### The Hurdles: Why We Pivoted
 
-## Project Structure
+1.  **The AWS Bedrock Payment Wall**: A significant roadblock was the `INVALID_PAYMENT_INSTRUMENT` error when enabling Bedrock. This required a specific type of credit card and couldn't be resolved with standard payment methods like UPI, which is a common issue for developers and hackathon participants in India. This completely halted our development on the core AI feature.
 
-```
-rti-voice-assistant/
-├── backend/                 # AWS Lambda functions
-│   ├── voice-service/      # Speech processing
-│   ├── legal-service/      # Legal guidance with Bedrock
-│   ├── form-service/       # RTI form processing
-│   ├── session-service/    # Session management
-│   └── privacy-service/    # DPDPA compliance
-├── frontend/               # Next.js application
-│   ├── src/
-│   │   ├── components/    # React components
-│   │   ├── pages/         # Next.js pages
-│   │   └── lib/           # Utilities
-│   └── public/            # Static assets
-├── infrastructure/         # IaC templates
-│   ├── cloudformation/    # CloudFormation templates
-│   └── sam/               # AWS SAM templates
-└── docs/                  # Documentation
-```
+2.  **Real-Time Conversation Latency**: In our initial tests with Bedrock, we found that the response times, while acceptable, were not ideal for a truly real-time, natural-feeling voice conversation. Delays of even 2-3 seconds can disrupt the user experience.
 
-## Prerequisites
+3.  **Limited Language Support for TTS**: We discovered that **AWS Polly does not offer a voice for the Kannada language**. This was a major issue for our goal of providing comprehensive multilingual support.
 
-- AWS Account with appropriate credits
-- AWS CLI configured
-- Node.js 18+ and npm
-- Python 3.11+
-- Docker (for Lambda container images)
-- AWS SAM CLI (optional, for local testing)
+### The Solution: A Hybrid, Best-of-Breed Approach
+
+We pivoted to a hybrid model that leverages third-party services with excellent free tiers, solving all our previous issues.
+
+1.  **Groq for Unmatched Speed**: For English, our primary LLM is **Groq**, running LLaMA 3.1. It is incredibly fast (often >500 tokens/sec), providing the near-instant responses needed for a fluid conversation.
+
+2.  **Gemini for Superior Multilingual Support**: For **Hindi and Kannada**, we use **Google's Gemini 1.5 Flash**. It has exceptional multilingual capabilities and provides high-quality, nuanced responses in these languages.
+
+3.  **gTTS for Kannada Voice**: To solve the TTS problem, we integrated the `gTTS` (Google Text-to-Speech) library, which provides a clear and natural-sounding voice for Kannada, ensuring a first-class experience for Kannada-speaking users.
+
+### The Result: A Faster, More Robust System
+
+This new architecture isn't just a workaround; it's an upgrade. We now have a **triple-fallback system** that makes our application incredibly robust:
+
+-   **English Flow**: `Groq` → `Gemini` (if Groq fails) → `Rule-based` (if both fail)
+-   **Hindi/Kannada Flow**: `Gemini` → `Groq` (if Gemini fails) → `Rule-based` (if both fail)
+
+This ensures that the user always gets a response, making the system reliable even if one of the LLM providers is down. Best of all, the generous free tiers from Groq and Google allowed us to build this entire system without being blocked by payment issues.
+
+---
+
+## Tech Stack
+
+- **Frontend**: Next.js (TypeScript)
+- **Backend**: FastAPI (Python)
+- **Primary LLM (English)**: Groq (LLaMA 3.1 70B)
+- **Fallback & Multilingual LLM**: Google Gemini 1.5 Flash
+- **Text-to-Speech**: AWS Polly (English/Hindi) & gTTS (Kannada)
+- **Database**: Amazon DynamoDB (for session storage with 24h TTL)
+- **Storage**: Amazon S3 (for temporary document storage)
 
 ## Getting Started
 
-### 1. Clone the Repository
+### Prerequisites
+- Node.js 18+ and npm
+- Python 3.9+
+- Groq API Key
+- Gemini API Key
 
+### 1. Clone the Repository
 ```bash
 git clone <repository-url>
 cd rti-voice-assistant
 ```
 
-### 2. Set Up AWS Infrastructure
-
+### 2. Configure Environment Variables
+Create a `.env` file in the `backend` directory and add your API keys:
 ```bash
-cd infrastructure
-# Deploy using CloudFormation or SAM
-aws cloudformation create-stack --stack-name rti-voice-assistant --template-body file://cloudformation/main.yaml
+# backend/.env
+GROQ_API_KEY=gsk_your_key_here
+GEMINI_API_KEY=AIza_your_key_here
 ```
 
-### 3. Configure Environment Variables
+### 3. Install Dependencies & Run
 
-```bash
-cp .env.example .env
-# Edit .env with your AWS resource ARNs
-```
-
-### 4. Deploy Backend Lambda Functions
-
+#### Backend
 ```bash
 cd backend
-# Build and deploy Lambda functions
-./deploy.sh
+pip install -r requirements.txt
+python app.py
 ```
 
-### 5. Deploy Frontend to Amplify
-
+#### Frontend (in a new terminal)
 ```bash
 cd frontend
 npm install
-npm run build
-# Deploy to Amplify (or use Amplify Console)
-```
-
-## Development
-
-### Local Development
-
-```bash
-# Backend (using SAM local)
-cd backend
-sam local start-api
-
-# Frontend
-cd frontend
 npm run dev
 ```
 
-### Testing
-
-```bash
-# Backend tests
-cd backend
-pytest
-
-# Frontend tests
-cd frontend
-npm test
-```
-
-## Privacy & Compliance
-
-This application complies with India's Digital Personal Data Protection Act (DPDPA) 2023:
-
-- ✅ Explicit consent collection
-- ✅ End-to-end encryption (AWS KMS)
-- ✅ 24-hour maximum data retention (DynamoDB TTL + S3 lifecycle)
-- ✅ Audit logging (CloudWatch)
-- ✅ Data deletion on request
-
-## License
-
-[License Type] - See LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please read CONTRIBUTING.md for guidelines.
-
-## Support
-
-For issues and questions, please open a GitHub issue or contact [support email].
+### 4. Open the App
+Navigate to `http://localhost:3000` in your browser.

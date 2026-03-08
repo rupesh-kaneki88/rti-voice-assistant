@@ -25,6 +25,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState('initial'); // 'initial', 'conversation', 'form-filling'
+  const [showConversationInFormMode, setShowConversationInFormMode] = useState(false);
 
   const { t } = useTranslation(language);
 
@@ -53,6 +54,9 @@ export default function Home() {
   const handleFormUpdate = (updates: Partial<FormData> & { mode?: string }) => {
     if (updates.mode && updates.mode !== mode) {
       setMode(updates.mode);
+      if (updates.mode === 'form-filling') {
+        setShowConversationInFormMode(false); // Reset when entering form mode
+      }
     }
     const formUpdates = { ...updates };
     delete formUpdates.mode;
@@ -104,26 +108,7 @@ export default function Home() {
         {sessionId && !isLoading && (
           <div className="flex flex-col lg:flex-row gap-8">
             
-            {/* Left Panel: Conversation or Form */}
-            <div className="lg:w-2/3 bg-white rounded-2xl shadow-lg border border-neutral-200 h-[65vh] flex flex-col">
-              {mode === 'form-filling' ? (
-                <div className="p-6 h-full overflow-y-auto">
-                  <h2 id="form-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
-                    {t('form.title')}
-                  </h2>
-                  <RTIForm 
-                    sessionId={sessionId} 
-                    language={language}
-                    initialData={formData}
-                    onLocalUpdate={handleFormUpdate}
-                  />
-                </div>
-              ) : (
-                <ConversationView history={conversationHistory} language={language} />
-              )}
-            </div>
-
-            {/* Right Panel: Voice Controller */}
+            {/* Left Panel: Voice Controller */}
             <div className="lg:w-1/3 flex items-center justify-center">
               <VoiceRecorderRealtime 
                 sessionId={sessionId} 
@@ -132,6 +117,47 @@ export default function Home() {
                 setMode={setMode}
                 onNewMessage={(message) => setConversationHistory(prev => [...prev, message])}
               />
+            </div>
+
+            {/* Right Panel: Conversation or Form */}
+            <div className="lg:w-2/3 flex flex-col gap-4">
+              <div className="relative bg-white rounded-2xl shadow-lg border border-neutral-200">
+                {mode === 'form-filling' ? (
+                  <div>
+                    <div className="p-6 pb-16"> {/* Add padding to the bottom */}
+                      <h2 id="form-section-title" className="text-2xl font-bold text-neutral-900 mb-4">
+                        {t('form.title')}
+                      </h2>
+                      <RTIForm 
+                        sessionId={sessionId} 
+                        language={language}
+                        initialData={formData}
+                        onLocalUpdate={handleFormUpdate}
+                      />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-sm border-t border-neutral-200 rounded-b-2xl">
+                      <div className="text-center">
+                        <button 
+                          onClick={() => setShowConversationInFormMode(!showConversationInFormMode)}
+                          className="text-blue-600 hover:underline font-semibold"
+                        >
+                          {showConversationInFormMode ? 'Hide Conversation' : 'Show Conversation'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-[65vh] overflow-y-auto">
+                    <ConversationView history={conversationHistory} language={language} />
+                  </div>
+                )}
+              </div>
+              {mode === 'form-filling' && showConversationInFormMode && (
+                <div className="bg-white rounded-2xl shadow-lg border border-neutral-200 p-4 h-96 overflow-y-auto">
+                  <h3 className="text-xl font-bold text-neutral-800 mb-2">Conversation History</h3>
+                  <ConversationView history={conversationHistory} language={language} />
+                </div>
+              )}
             </div>
           </div>
         )}

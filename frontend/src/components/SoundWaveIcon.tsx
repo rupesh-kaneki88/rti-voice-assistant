@@ -3,35 +3,49 @@
 import React from 'react';
 
 interface SoundWaveIconProps {
-  color?: string;
-  width?: string;
-  height?: string;
   state: 'listening' | 'speaking' | 'thinking';
 }
 
-const SoundWaveIcon: React.FC<SoundWaveIconProps> = ({ color = 'currentColor', width = '24', height = '24', state }) => {
-  const barClass = `absolute bottom-0 w-1.5 rounded-full ${color}`;
+const SoundWaveIcon: React.FC<SoundWaveIconProps> = ({ state }) => {
+  if (state === 'listening') {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute w-24 h-24 rounded-full border-4 border-blue-500/60 animate-listening-pulse"></div>
+        <div className="absolute w-24 h-24 rounded-full border-4 border-blue-500/60 animate-listening-pulse [animation-delay:0.7s]"></div>
+        <div className="absolute w-24 h-24 rounded-full border-4 border-blue-500/60 animate-listening-pulse [animation-delay:1.4s]"></div>
+      </div>
+    );
+  }
 
-  const getAnimationClass = (index: number) => {
-    if (state === 'listening') {
-      return `animate-wave-listening animation-delay-${index}`;
-    } else if (state === 'speaking') {
-      return `animate-wave-speaking animation-delay-${index}`;
-    } else if (state === 'thinking') {
-      return `animate-wave-thinking animation-delay-${index}`;
-    }
-    return '';
-  };
+  if (state === 'speaking') {
+    return (
+      <div className="flex items-center justify-center space-x-1">
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.1s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.2s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.3s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.4s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.5s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.6s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.7s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.8s]"></div>
+        <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.9s]"></div>
+      </div>
+    );
+  }
 
-  return (
-    <div className="relative flex items-end justify-between overflow-hidden" style={{ width, height }}>
-      <div className={`${barClass} h-1/4 left-0 ${getAnimationClass(1)}`}></div>
-      <div className={`${barClass} h-1/2 left-1/4 ${getAnimationClass(2)}`}></div>
-      <div className={`${barClass} h-full left-1/2 ${getAnimationClass(3)}`}></div>
-      <div className={`${barClass} h-1/2 left-3/4 ${getAnimationClass(4)}`}></div>
-      <div className={`${barClass} h-1/4 right-0 ${getAnimationClass(5)}`}></div>
-    </div>
-  );
+  if (state === 'thinking') {
+    return (
+      <div className="flex items-center justify-center h-24 w-24">
+        <div className="flex space-x-2">
+          <div className="w-3 h-3 bg-blue-600 rounded-full animate-thinking-dot"></div>
+          <div className="w-3 h-3 bg-blue-600 rounded-full animate-thinking-dot [animation-delay:0.2s]"></div>
+          <div className="w-3 h-3 bg-blue-600 rounded-full animate-thinking-dot [animation-delay:0.4s]"></div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 };
 
 export default SoundWaveIcon;

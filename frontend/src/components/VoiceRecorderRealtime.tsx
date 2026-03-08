@@ -68,9 +68,7 @@ export default function VoiceRecorderRealtime({
       onNewMessage({ role: 'agent', content: greeting }); // Send message up
       setMode('conversation');
       
-      setAgentState('speaking');
       await speakText(greeting);
-      setAgentState('idle');
     } catch (err) {
       console.error('Wake up error:', err);
       setError('Could not start the session. Please try again.');
@@ -146,9 +144,7 @@ export default function VoiceRecorderRealtime({
       onNewMessage({ role: 'agent', content: agent_response }); // Send message up
       onFormUpdate({ ...form_updates, mode });
       
-      setAgentState('speaking');
       await speakText(agent_response);
-      setAgentState('idle');
       
     } catch (err) {
       console.error('Processing error:', err);
@@ -159,18 +155,29 @@ export default function VoiceRecorderRealtime({
   };
 
   const speakText = async (text: string) => {
+    setAgentState('speaking');
     try {
       const audioData = await textToSpeech(text, language);
       const audio = new Audio(`data:audio/mp3;base64,${audioData.audio}`);
       audioRef.current = audio;
       
       await new Promise<void>((resolve, reject) => {
-        audio.onended = () => resolve();
-        audio.onerror = (e) => reject(e);
-        audio.play().catch(e => reject(e));
+        audio.onended = () => {
+          setAgentState('idle');
+          resolve();
+        };
+        audio.onerror = (e) => {
+          setAgentState('idle');
+          reject(e);
+        };
+        audio.play().catch(e => {
+          setAgentState('idle');
+          reject(e);
+        });
       });
     } catch (err) {
       console.error('TTS error:', err);
+      setAgentState('idle');
     }
   };
 
@@ -179,13 +186,13 @@ export default function VoiceRecorderRealtime({
 
   const getButtonContent = () => {
     switch (agentState) {
-      case 'uninitialized': return <><Bot size={32} /><span className="mt-2 text-sm font-semibold">{t('button.wakeUp')}</span></>;
-      case 'listening': return <SoundWaveIcon state="listening" width="48px" height="48px" />;
-      case 'speaking': return <SoundWaveIcon state="speaking" width="48px" height="48px" />;
-      case 'thinking': return <SoundWaveIcon state="thinking" width="48px" height="48px" />;
-      case 'error': return <Bot size={32} />;
+      case 'uninitialized': return <Bot size={48} />;
+      case 'listening': return <SoundWaveIcon key="listening" state="listening" />;
+      case 'speaking': return <SoundWaveIcon key="speaking" state="speaking" />;
+      case 'thinking': return <SoundWaveIcon key="thinking" state="thinking" />;
+      case 'error': return <Bot size={48} />;
       case 'idle': return <Mic size={48} />;
-      default: return <Bot size={32} />;
+      default: return <Bot size={48} />;
     }
   };
 
@@ -202,11 +209,12 @@ export default function VoiceRecorderRealtime({
   };
 
   const buttonClass = `
-    flex items-center justify-center w-20 h-20 rounded-full text-white font-bold
-    transition-transform transform focus:outline-none focus:ring-2 focus:ring-offset-2
+    flex items-center justify-center w-24 h-24 rounded-full text-white font-bold
+    transition-all duration-300 ease-in-out transform focus:outline-none focus:ring-4 focus:ring-offset-2
     disabled:opacity-60 disabled:cursor-not-allowed
     ${!isDisabled && 'hover:scale-105'}
-    ${isListening ? 'bg-red-600 focus:ring-red-500' : 'bg-blue-600 focus:ring-blue-500'}
+    ${isListening ? 'bg-red-600 focus:ring-red-400' : 'bg-blue-600 focus:ring-blue-400'}
+    shadow-lg
   `;
 
   const handleClick = () => {
@@ -227,7 +235,7 @@ export default function VoiceRecorderRealtime({
   return (
     <div className="flex flex-col h-full items-center justify-center">
       {/* Agent Status & Control */}
-      <div className="flex-shrink-0 flex flex-col items-center justify-center gap-4">
+      <div className="flex-shrink-0 flex flex-col items-center justify-center gap-6">
         <button
           onClick={handleClick}
           disabled={isDisabled}
@@ -237,9 +245,9 @@ export default function VoiceRecorderRealtime({
           {getButtonContent()}
         </button>
         <div className="text-center">
-          <p className="font-semibold text-lg text-neutral-800">{getStatusText()}</p>
-          <p className="text-neutral-500 text-sm">
-            {isListening ? 'Click the square to stop' : 'Click the mic to speak'}
+          <p className="font-semibold text-xl text-neutral-800">{getStatusText()}</p>
+          <p className="text-neutral-500 text-md">
+            {isListening ? 'Click the button to stop' : 'Click the button to speak'}
           </p>
         </div>
         {error && (

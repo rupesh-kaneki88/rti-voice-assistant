@@ -2,18 +2,22 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { textToSpeech, haveConversation } from '@/lib/api';
-import { FormData } from '@/app/page'; // Import the shared FormData type
+import { FormData } from '@/app/page';
+import { ConversationMessage } from './ConversationView';
+import { useTranslation } from '@/hooks/useTranslation';
+import { Mic, Square, Bot, BrainCircuit, Loader, Volume2 } from 'lucide-react';
 
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
   onFormUpdate: (updates: Partial<FormData> & { mode?: string }) => void;
+  conversationHistory: ConversationMessage[];
+  setConversationHistory: React.Dispatch<React.SetStateAction<ConversationMessage[]>>;
+  setMode: React.Dispatch<React.SetStateAction<string>>;
 }
 
-type AgentState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+type AgentState = 'uninitialized' | 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
-
-// Declare Web Speech API types
 declare global {
   interface Window {
     SpeechRecognition: any;
@@ -21,89 +25,58 @@ declare global {
   }
 }
 
-export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdate }: VoiceRecorderProps) {
-  const [agentState, setAgentState] = useState<AgentState>('idle');
+export default function VoiceRecorderRealtime({ 
+  sessionId, language, onFormUpdate, conversationHistory, setConversationHistory, setMode 
+}: VoiceRecorderProps) {
+  const [agentState, setAgentState] = useState<AgentState>('uninitialized');
   const [error, setError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
   
-  interface ConversationMessage {
-    role: 'user' | 'agent';
-    content: string;
-  }
-  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
-  
+  const { t } = useTranslation(language);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const conversationEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Scroll to the bottom of the conversation history
-    conversationEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [conversationHistory]);
-
-  useEffect(() => {
-    // Check if Web Speech API is supported
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setIsSupported(false);
-      setError('Speech recognition not supported in this browser. Please use Chrome or Edge.');
+      setError('Speech recognition not supported. Please use Chrome or Edge.');
     }
   }, []);
 
   useEffect(() => {
-    // On language change, if we have already greeted, fetch the new guidance message to display
-    const updateGuidanceOnLanguageChange = async () => {
-      if (conversationHistory.length > 0 && sessionId) {
-        try {
-          const response = await haveConversation(sessionId, '', language);
-          setConversationHistory(prev => [...prev, { role: 'agent', content: response.agent_response }]);
-        } catch (err) {
-          console.error('Guidance update error:', err);
-        }
-      }
+    // Stop any ongoing processes if the session ID changes
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.abort();
+      if (audioRef.current) audioRef.current.pause();
     };
-    updateGuidanceOnLanguageChange();
-  }, [language]);
+  }, [sessionId]);
 
-  const getStateMessage = () => {
-    switch (agentState) {
-      case 'idle':
-        return conversationHistory.length > 0 ? 'Ready to listen' : 'Click Speak to start';
-      case 'listening':
-        return 'Listening... Speak now';
-      case 'thinking':
-        return 'Processing your speech...';
-      case 'speaking':
-        return 'Speaking response...';
-      case 'error':
-        return 'Error occurred';
-      default:
-        return '';
-    }
-  };
-
-  const startListening = async () => {
-    // First interaction: Greet the user, then start listening
-    if (conversationHistory.length === 0 && sessionId) {
+  const handleWakeUp = async () => {
+    if (sessionId) {
       try {
         setAgentState('thinking');
+        setError(null);
         const response = await haveConversation(sessionId, '', language);
         const greeting = response.agent_response;
         setConversationHistory([{ role: 'agent', content: greeting }]);
+        setMode('conversation');
         
         setAgentState('speaking');
         await speakText(greeting);
-
+        setAgentState('idle');
       } catch (err) {
-        console.error('Greeting error:', err);
+        console.error('Wake up error:', err);
         setError('Could not start the session. Please try again.');
         setAgentState('error');
-        setTimeout(() => setAgentState('idle'), 3000);
-        return;
+        setTimeout(() => setAgentState('uninitialized'), 3000);
       }
     }
+  };
 
-    // --- Regular listening logic ---
+  const startListening = () => {
+    if (agentState !== 'idle') return;
+
     try {
       setError(null);
       setAgentState('listening');
@@ -115,22 +88,17 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       recognition.lang = languageMap[language] || 'hi-IN';
       recognition.continuous = false;
       recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
 
-      recognition.onresult = async (event: any) => {
+      recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        await processTranscription(transcript);
+        processTranscription(transcript);
       };
 
       recognition.onerror = (event: any) => {
-        let errorMessage = 'Speech recognition failed. ';
-        switch (event.error) {
-          case 'no-speech': errorMessage += 'No speech detected.'; break;
-          case 'audio-capture': errorMessage += 'Microphone not accessible.'; break;
-          case 'not-allowed': errorMessage += 'Microphone permission denied.'; break;
-          default: errorMessage += 'Please try again.';
-        }
-        setError(errorMessage);
+        let msg = 'Speech recognition failed. ';
+        if (event.error === 'not-allowed') msg = 'Microphone permission denied.';
+        else if (event.error === 'no-speech') msg = 'No speech was detected.';
+        setError(msg);
         setAgentState('error');
         setTimeout(() => setAgentState('idle'), 3000);
       };
@@ -143,7 +111,7 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       recognition.start();
       
     } catch (err) {
-      console.error('Failed to start recognition:', err);
+      console.error('Recognition start error:', err);
       setError('Failed to start speech recognition.');
       setAgentState('error');
     }
@@ -152,32 +120,23 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
   const stopListening = () => {
     if (recognitionRef.current) {
       recognitionRef.current.stop();
-      setAgentState('idle');
     }
+    setAgentState('idle');
   };
 
   const processTranscription = async (text: string) => {
     try {
       setAgentState('thinking');
-      setError(null);
-      
       setConversationHistory(prev => [...prev, { role: 'user', content: text }]);
       
-      const conversationResponse = await haveConversation(sessionId, text, language);
-      const { agent_response, form_updates, is_complete, mode } = conversationResponse;
+      const response = await haveConversation(sessionId, text, language);
+      const { agent_response, form_updates, mode } = response;
       
       setConversationHistory(prev => [...prev, { role: 'agent', content: agent_response }]);
-      
-      // Always call onFormUpdate to propagate mode changes
       onFormUpdate({ ...form_updates, mode });
       
       setAgentState('speaking');
       await speakText(agent_response);
-      
-      if (is_complete) {
-        announceToScreenReader('Your RTI application is complete!');
-      }
-      
       setAgentState('idle');
       
     } catch (err) {
@@ -195,85 +154,87 @@ export default function VoiceRecorderRealtime({ sessionId, language, onFormUpdat
       audioRef.current = audio;
       
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => { console.warn("Audio playback timed out."); resolve(); }, 15000);
-        audio.onended = () => { clearTimeout(timeout); resolve(); };
-        audio.onerror = (e) => { clearTimeout(timeout); reject(e); };
-        audio.play().catch(e => { clearTimeout(timeout); reject(e); });
+        audio.onended = resolve;
+        audio.onerror = reject;
+        audio.play().catch(reject);
       });
     } catch (err) {
-      console.error('TTS or playback error:', err);
+      console.error('TTS error:', err);
     }
   };
 
-  const announceToScreenReader = (message: string) => {
-    const announcement = document.createElement('div');
-    announcement.setAttribute('role', 'status');
-    announcement.setAttribute('aria-live', 'polite');
-    announcement.className = 'sr-only';
-    announcement.textContent = message;
-    document.body.appendChild(announcement);
-    setTimeout(() => document.body.removeChild(announcement), 1000);
+  const getButtonContent = () => {
+    switch (agentState) {
+      case 'uninitialized': return <><Bot size={32} /><span className="mt-2 text-sm font-semibold">{t('button.wakeUp')}</span></>;
+      case 'listening': return <Mic size={48} />;
+      case 'speaking': return <Volume2 size={48} />;
+      case 'thinking': return <Loader size={48} className="animate-spin-slow" />;
+      case 'error': return <Bot size={32} />;
+      case 'idle': return <Mic size={48} />;
+      default: return <Bot size={32} />;
+    }
   };
 
-  const isDisabled = agentState === 'thinking' || agentState === 'speaking' || !isSupported;
-  const isListening = agentState === 'listening';
+  const getStatusText = () => {
+    switch (agentState) {
+      case 'uninitialized': return t('status.uninitialized');
+      case 'idle': return t('status.idle');
+      case 'listening': return t('status.listening');
+      case 'thinking': return t('status.thinking');
+      case 'speaking': return t('status.speaking');
+      case 'error': return error || t('status.error');
+      default: return '';
+    }
+  };
+
+  const buttonClass = `
+    w-48 h-48 rounded-full flex flex-col items-center justify-center 
+    text-white font-bold shadow-2xl transition-all duration-300 ease-in-out 
+    transform hover:scale-105 focus:outline-none focus:ring-4
+    disabled:opacity-70 disabled:cursor-not-allowed disabled:scale-100
+  `;
+
+  const getButtonStateClass = () => {
+    switch (agentState) {
+      case 'uninitialized': return 'bg-gradient-to-br from-neutral-700 to-neutral-900 focus:ring-neutral-500';
+      case 'idle': return 'bg-gradient-to-br from-blue-500 to-blue-700 focus:ring-blue-400';
+      case 'listening': return 'bg-gradient-to-br from-green-500 to-green-700 focus:ring-green-400 scale-110';
+      case 'speaking': return 'bg-gradient-to-br from-indigo-500 to-indigo-700 focus:ring-indigo-400 animate-pulse';
+      case 'thinking': return 'bg-gradient-to-br from-yellow-500 to-yellow-700 focus:ring-yellow-400';
+      case 'error': return 'bg-gradient-to-br from-red-500 to-red-700 focus:ring-red-400';
+      default: return 'bg-neutral-500';
+    }
+  };
+
+  const handleClick = () => {
+    if (agentState === 'uninitialized') handleWakeUp();
+    else if (agentState === 'idle') startListening();
+    else if (agentState === 'listening') stopListening();
+  };
 
   if (!isSupported) {
     return (
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded">
-        <p className="font-bold">Speech Recognition Not Supported</p>
-        <p>Please use Google Chrome or Microsoft Edge for voice input.</p>
+      <div className="text-center p-4 bg-yellow-100 border-yellow-500 text-yellow-800 rounded-lg">
+        <p className="font-bold">Voice input not supported.</p>
+        <p>Please use Chrome or Edge on a desktop computer.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Conversation History */}
-      <div className="flex-grow h-96 overflow-y-auto p-4 bg-white border border-neutral-200 rounded-lg space-y-4 mb-4">
-        {conversationHistory.map((msg, index) => (
-          <div key={index} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-xs md:max-w-md p-3 rounded-lg ${msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-neutral-200 text-neutral-800'}`}>
-              <p className="text-sm">{msg.content}</p>
-            </div>
-          </div>
-        ))}
-        <div ref={conversationEndRef} />
-      </div>
-
-      {/* Agent Status & Control */}
-      <div className="flex-shrink-0">
-        <div className="flex items-center justify-center gap-4">
-          <button
-            onClick={isListening ? stopListening : startListening}
-            disabled={isDisabled}
-            className={`
-              flex items-center justify-center w-20 h-20 rounded-full text-white font-bold
-              transition-transform transform focus:outline-none focus:ring-2 focus:ring-offset-2
-              disabled:opacity-60 disabled:cursor-not-allowed
-              ${!isDisabled && 'hover:scale-105'}
-              ${isListening ? 'bg-red-600 focus:ring-red-500' : 'bg-blue-600 focus:ring-blue-500'}
-            `}
-            aria-label={isListening ? 'Stop listening' : 'Start listening'}
-          >
-            <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
-              {isListening ? (
-                <path d="M5 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H5z" />
-              ) : (
-                <path d="M7 4a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0V4zm1 0a2 2 0 0 1 4 0v6a2 2 0 0 1-4 0V4zm-3 6a1 1 0 0 1 1 1v1a4 4 0 0 0 8 0v-1a1 1 0 1 1 2 0v1a6 6 0 1 1-12 0v-1a1 1 0 0 1 1-1z" />
-              )}
-            </svg>
-          </button>
-          <div className="text-left">
-            <p className="font-semibold text-lg text-neutral-800">{getStateMessage()}</p>
-            <p className="text-neutral-500 text-sm">
-              {isListening ? 'Click the square to stop' : 'Click the mic to speak'}
-            </p>
-          </div>
-        </div>
-        {error && (
-          <p role="alert" className="text-red-600 text-center text-sm mt-2">{error}</p>
-        )}
+    <div className="flex flex-col items-center justify-center gap-6 text-center" role="region" aria-label="Voice Agent Controls">
+      <button
+        onClick={handleClick}
+        disabled={agentState === 'thinking' || agentState === 'speaking'}
+        className={`${buttonClass} ${getButtonStateClass()}`}
+        aria-label={agentState === 'listening' ? 'Stop listening' : 'Start listening'}
+      >
+        {getButtonContent()}
+      </button>
+      <div className="h-10">
+        <p className={`text-lg font-semibold transition-opacity duration-300 ${agentState === 'error' ? 'text-red-600' : 'text-neutral-700'}`}>
+          {getStatusText()}
+        </p>
       </div>
     </div>
   );

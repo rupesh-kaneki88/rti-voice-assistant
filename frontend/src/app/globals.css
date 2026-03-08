@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  @keyframes listening-pulse {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.7;
+    }
+    100% {
+      transform: scale(1.4);
+      opacity: 0;
+    }
+  }
+
+  .animate-listening-pulse {
+    animation: listening-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes wave {
+    0%, 100% {
+      transform: scaleY(0.5);
+    }
+    50% {
+      transform: scaleY(1);
+    }
+  }
+
+  .animate-wave {
+    animation: wave 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
 body {
   @apply bg-neutral-100 text-neutral-800;
   font-family: 'Inter', sans-serif;

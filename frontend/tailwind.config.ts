@@ -35,8 +35,8 @@ const config: Config = {
         },
       },
       keyframes: {
-        'pulse-ring': {
-          '0%': { transform: 'scale(0.8)', opacity: '1' },
+        'listening-pulse': {
+          '0%': { transform: 'scale(0.6)', opacity: '0.7' },
           '100%': { transform: 'scale(1.4)', opacity: '0' },
         },
         'wave': {
@@ -49,7 +49,7 @@ const config: Config = {
         },
       },
       animation: {
-        'pulse-ring': 'pulse-ring 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'listening-pulse': 'listening-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
         'wave': 'wave 1.2s ease-in-out infinite',
         'thinking-dot': 'thinking-dot 1s ease-in-out infinite',
       },
@@ -59,3 +59,4 @@ const config: Config = {
 };
 
 export default config;
+

@@ -39,19 +39,26 @@ const config: Config = {
           '0%': { transform: 'scale(0.6)', opacity: '0.7' },
           '100%': { transform: 'scale(1.4)', opacity: '0' },
         },
-        'wave': {
-          '0%, 100%': { transform: 'scaleY(0.5)' },
-          '50%': { transform: 'scaleY(1.5)' },
+        'wave-listening': {
+          '0%, 100%': { height: '25%' },
+          '50%': { height: '75%' },
         },
-        'thinking-dot': {
-          '0%, 100%': { transform: 'translateY(0)' },
-          '50%': { transform: 'translateY(-8px)' },
+        'wave-speaking': {
+          '0%, 100%': { height: '10%' },
+          '25%': { height: '100%' },
+          '50%': { height: '50%' },
+          '75%': { height: '80%' },
+        },
+        'wave-thinking': {
+          '0%, 100%': { transform: 'scaleY(0.7)' },
+          '50%': { transform: 'scaleY(1)' },
         },
       },
       animation: {
         'listening-pulse': 'listening-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'wave': 'wave 1.2s ease-in-out infinite',
-        'thinking-dot': 'thinking-dot 1s ease-in-out infinite',
+        'wave-listening': 'wave-listening 1.5s ease-in-out infinite',
+        'wave-speaking': 'wave-speaking 0.8s ease-in-out infinite',
+        'wave-thinking': 'wave-thinking 1s ease-in-out infinite',
       },
     },
   },
@@ -59,4 +66,3 @@ const config: Config = {
 };
 
 export default config;
-

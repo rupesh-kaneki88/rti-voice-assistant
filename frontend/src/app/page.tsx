@@ -129,9 +129,8 @@ export default function Home() {
                 sessionId={sessionId} 
                 language={language}
                 onFormUpdate={handleFormUpdate}
-                conversationHistory={conversationHistory}
-                setConversationHistory={setConversationHistory}
                 setMode={setMode}
+                onNewMessage={(message) => setConversationHistory(prev => [...prev, message])}
               />
             </div>
           </div>

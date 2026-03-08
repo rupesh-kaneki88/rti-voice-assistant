@@ -3,17 +3,18 @@
 import { useState, useRef, useEffect } from 'react';
 import { textToSpeech, haveConversation } from '@/lib/api';
 import { FormData } from '@/app/page';
-import { ConversationMessage } from './ConversationView';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Mic, Square, Bot, BrainCircuit, Loader, Volume2 } from 'lucide-react';
+import SoundWaveIcon from './SoundWaveIcon'; // Import the new component
 
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
   onFormUpdate: (updates: Partial<FormData> & { mode?: string }) => void;
-  conversationHistory: ConversationMessage[];
-  setConversationHistory: React.Dispatch<React.SetStateAction<ConversationMessage[]>>;
+  // conversationHistory: ConversationMessage[]; // Removed
+  // setConversationHistory: React.Dispatch<React.SetStateAction<ConversationMessage[]>>; // Removed
   setMode: React.Dispatch<React.SetStateAction<string>>;
+  onNewMessage: (message: { role: 'user' | 'agent'; content: string }) => void; // New prop for sending messages up
 }
 
 type AgentState = 'uninitialized' | 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
@@ -26,7 +27,7 @@ declare global {
 }
 
 export default function VoiceRecorderRealtime({ 
-  sessionId, language, onFormUpdate, conversationHistory, setConversationHistory, setMode 
+  sessionId, language, onFormUpdate, setMode, onNewMessage 
 }: VoiceRecorderProps) {
   const [agentState, setAgentState] = useState<AgentState>('uninitialized');
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,11 @@ export default function VoiceRecorderRealtime({
   const { t } = useTranslation(language);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const agentStateRef = useRef<AgentState>(agentState); // For onend callback
+
+  useEffect(() => {
+    agentStateRef.current = agentState; // Keep ref updated
+  }, [agentState]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -53,29 +59,28 @@ export default function VoiceRecorderRealtime({
   }, [sessionId]);
 
   const handleWakeUp = async () => {
-    if (sessionId) {
-      try {
-        setAgentState('thinking');
-        setError(null);
-        const response = await haveConversation(sessionId, '', language);
-        const greeting = response.agent_response;
-        setConversationHistory([{ role: 'agent', content: greeting }]);
-        setMode('conversation');
-        
-        setAgentState('speaking');
-        await speakText(greeting);
-        setAgentState('idle');
-      } catch (err) {
-        console.error('Wake up error:', err);
-        setError('Could not start the session. Please try again.');
-        setAgentState('error');
-        setTimeout(() => setAgentState('uninitialized'), 3000);
-      }
+    if (!sessionId) return;
+    try {
+      setAgentState('thinking');
+      setError(null);
+      const response = await haveConversation(sessionId, '', language);
+      const greeting = response.agent_response;
+      onNewMessage({ role: 'agent', content: greeting }); // Send message up
+      setMode('conversation');
+      
+      setAgentState('speaking');
+      await speakText(greeting);
+      setAgentState('idle');
+    } catch (err) {
+      console.error('Wake up error:', err);
+      setError('Could not start the session. Please try again.');
+      setAgentState('error');
+      setTimeout(() => setAgentState('uninitialized'), 3000);
     }
   };
 
   const startListening = () => {
-    if (agentState !== 'idle') return;
+    if (agentState !== 'idle') return; // Only listen if idle
 
     try {
       setError(null);
@@ -96,15 +101,21 @@ export default function VoiceRecorderRealtime({
 
       recognition.onerror = (event: any) => {
         let msg = 'Speech recognition failed. ';
-        if (event.error === 'not-allowed') msg = 'Microphone permission denied.';
-        else if (event.error === 'no-speech') msg = 'No speech was detected.';
+        switch (event.error) {
+          case 'no-speech': msg += 'No speech detected.'; break;
+          case 'audio-capture': msg += 'Microphone not accessible.'; break;
+          case 'not-allowed': msg += 'Microphone permission denied.'; break;
+          default: msg += 'Please try again.';
+        }
         setError(msg);
         setAgentState('error');
         setTimeout(() => setAgentState('idle'), 3000);
       };
 
       recognition.onend = () => {
-        if (agentState === 'listening') setAgentState('idle');
+        if (agentStateRef.current === 'listening') { // Use ref for up-to-date state
+          setAgentState('idle');
+        }
       };
 
       recognitionRef.current = recognition;
@@ -121,18 +132,18 @@ export default function VoiceRecorderRealtime({
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
-    setAgentState('idle');
+    // setAgentState('idle'); // Removed to fix TypeScript error
   };
 
   const processTranscription = async (text: string) => {
     try {
       setAgentState('thinking');
-      setConversationHistory(prev => [...prev, { role: 'user', content: text }]);
+      onNewMessage({ role: 'user', content: text }); // Send message up
       
       const response = await haveConversation(sessionId, text, language);
       const { agent_response, form_updates, mode } = response;
       
-      setConversationHistory(prev => [...prev, { role: 'agent', content: agent_response }]);
+      onNewMessage({ role: 'agent', content: agent_response }); // Send message up
       onFormUpdate({ ...form_updates, mode });
       
       setAgentState('speaking');
@@ -154,21 +165,24 @@ export default function VoiceRecorderRealtime({
       audioRef.current = audio;
       
       await new Promise<void>((resolve, reject) => {
-        audio.onended = resolve;
-        audio.onerror = reject;
-        audio.play().catch(reject);
+        audio.onended = () => resolve();
+        audio.onerror = (e) => reject(e);
+        audio.play().catch(e => reject(e));
       });
     } catch (err) {
       console.error('TTS error:', err);
     }
   };
 
+  const isDisabled = agentState === 'thinking' || agentState === 'speaking' || !isSupported;
+  const isListening = agentState === 'listening';
+
   const getButtonContent = () => {
     switch (agentState) {
       case 'uninitialized': return <><Bot size={32} /><span className="mt-2 text-sm font-semibold">{t('button.wakeUp')}</span></>;
-      case 'listening': return <Mic size={48} />;
-      case 'speaking': return <Volume2 size={48} />;
-      case 'thinking': return <Loader size={48} className="animate-spin-slow" />;
+      case 'listening': return <SoundWaveIcon state="listening" width="48px" height="48px" />;
+      case 'speaking': return <SoundWaveIcon state="speaking" width="48px" height="48px" />;
+      case 'thinking': return <SoundWaveIcon state="thinking" width="48px" height="48px" />;
       case 'error': return <Bot size={32} />;
       case 'idle': return <Mic size={48} />;
       default: return <Bot size={32} />;
@@ -188,23 +202,12 @@ export default function VoiceRecorderRealtime({
   };
 
   const buttonClass = `
-    w-48 h-48 rounded-full flex flex-col items-center justify-center 
-    text-white font-bold shadow-2xl transition-all duration-300 ease-in-out 
-    transform hover:scale-105 focus:outline-none focus:ring-4
-    disabled:opacity-70 disabled:cursor-not-allowed disabled:scale-100
+    flex items-center justify-center w-20 h-20 rounded-full text-white font-bold
+    transition-transform transform focus:outline-none focus:ring-2 focus:ring-offset-2
+    disabled:opacity-60 disabled:cursor-not-allowed
+    ${!isDisabled && 'hover:scale-105'}
+    ${isListening ? 'bg-red-600 focus:ring-red-500' : 'bg-blue-600 focus:ring-blue-500'}
   `;
-
-  const getButtonStateClass = () => {
-    switch (agentState) {
-      case 'uninitialized': return 'bg-gradient-to-br from-neutral-700 to-neutral-900 focus:ring-neutral-500';
-      case 'idle': return 'bg-gradient-to-br from-blue-500 to-blue-700 focus:ring-blue-400';
-      case 'listening': return 'bg-gradient-to-br from-green-500 to-green-700 focus:ring-green-400 scale-110';
-      case 'speaking': return 'bg-gradient-to-br from-indigo-500 to-indigo-700 focus:ring-indigo-400 animate-pulse';
-      case 'thinking': return 'bg-gradient-to-br from-yellow-500 to-yellow-700 focus:ring-yellow-400';
-      case 'error': return 'bg-gradient-to-br from-red-500 to-red-700 focus:ring-red-400';
-      default: return 'bg-neutral-500';
-    }
-  };
 
   const handleClick = () => {
     if (agentState === 'uninitialized') handleWakeUp();
@@ -214,27 +217,34 @@ export default function VoiceRecorderRealtime({
 
   if (!isSupported) {
     return (
-      <div className="text-center p-4 bg-yellow-100 border-yellow-500 text-yellow-800 rounded-lg">
-        <p className="font-bold">Voice input not supported.</p>
-        <p>Please use Chrome or Edge on a desktop computer.</p>
+      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded">
+        <p className="font-bold">Speech Recognition Not Supported</p>
+        <p>Please use Google Chrome or Microsoft Edge for voice input.</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 text-center" role="region" aria-label="Voice Agent Controls">
-      <button
-        onClick={handleClick}
-        disabled={agentState === 'thinking' || agentState === 'speaking'}
-        className={`${buttonClass} ${getButtonStateClass()}`}
-        aria-label={agentState === 'listening' ? 'Stop listening' : 'Start listening'}
-      >
-        {getButtonContent()}
-      </button>
-      <div className="h-10">
-        <p className={`text-lg font-semibold transition-opacity duration-300 ${agentState === 'error' ? 'text-red-600' : 'text-neutral-700'}`}>
-          {getStatusText()}
-        </p>
+    <div className="flex flex-col h-full items-center justify-center">
+      {/* Agent Status & Control */}
+      <div className="flex-shrink-0 flex flex-col items-center justify-center gap-4">
+        <button
+          onClick={handleClick}
+          disabled={isDisabled}
+          className={buttonClass}
+          aria-label={isListening ? 'Stop listening' : 'Start listening'}
+        >
+          {getButtonContent()}
+        </button>
+        <div className="text-center">
+          <p className="font-semibold text-lg text-neutral-800">{getStatusText()}</p>
+          <p className="text-neutral-500 text-sm">
+            {isListening ? 'Click the square to stop' : 'Click the mic to speak'}
+          </p>
+        </div>
+        {error && (
+          <p role="alert" className="text-red-600 text-center text-sm mt-2">{error}</p>
+        )}
       </div>
     </div>
   );

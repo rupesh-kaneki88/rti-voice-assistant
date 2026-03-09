@@ -32,14 +32,15 @@ const ChatIcon = () => (
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
+  onFormDataExtracted: (data: any) => void;
 }
 
 type AgentState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
 
-export default function VoiceRecorder({ sessionId, language, onFormDataExtracted }: VoiceRecorderProps) {
+export default function VoiceRecorder({ language}: VoiceRecorderProps) {
   const [agentState, setAgentState] = useState<AgentState>('idle');
   const [transcription, setTranscription] = useState<string>('');
-  const [statusMessage, setStatusMessage] = useState<string>('Ready to assist');
+  // const [statusMessage, setStatusMessage] = useState<string>('Ready to assist');
   const [error, setError] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -51,7 +52,7 @@ export default function VoiceRecorder({ sessionId, language, onFormDataExtracted
     setAgentState('idle');
     setTranscription('');
     setError(null);
-    setStatusMessage('Ready to assist');
+    // setStatusMessage('Ready to assist');
   }, [language]);
 
   const startRecording = async () => {
@@ -63,7 +64,7 @@ export default function VoiceRecorder({ sessionId, language, onFormDataExtracted
       setError(null);
       setTranscription('');
       setAgentState('listening');
-      setStatusMessage('Listening...');
+      // setStatusMessage('Listening...');
       
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
@@ -95,7 +96,7 @@ export default function VoiceRecorder({ sessionId, language, onFormDataExtracted
     if (mediaRecorderRef.current && agentState === 'listening') {
       mediaRecorderRef.current.stop();
       setAgentState('thinking');
-      setStatusMessage('Thinking...');
+      // setStatusMessage('Thinking...');
     }
   };
 
@@ -113,11 +114,11 @@ export default function VoiceRecorder({ sessionId, language, onFormDataExtracted
         setTranscription(result.text);
         
         setAgentState('speaking');
-        setStatusMessage('Responding...');
+        // setStatusMessage('Responding...');
         await speakText(result.text);
         
         setAgentState('idle');
-        setStatusMessage('Ready to assist');
+        // setStatusMessage('Ready to assist');
       };
     } catch (err) {
       setError('Could not process audio. Please try again.');

@@ -18,13 +18,7 @@ export function useTranslation(language: Language) {
   const t = useMemo(() => {
     return (key: string, replacements?: { [key: string]: string | number }): string => {
       const langFile = translations[language] || en;
-      let text = getNested(langFile, key);
-
-      if (!text) {
-        console.warn(`Translation key not found: ${key}`);
-        // Fallback to English
-        text = getNested(en, key) || key;
-      }
+      let text = getNested(langFile, key) || getNested(en, key) || key;
 
       if (replacements) {
         Object.entries(replacements).forEach(([rKey, value]) => {

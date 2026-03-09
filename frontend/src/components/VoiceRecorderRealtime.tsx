@@ -30,7 +30,7 @@ export default function VoiceRecorderRealtime({
 }: VoiceRecorderProps) {
   const [agentState, setAgentState] = useState<AgentState>('uninitialized');
   const [error, setError] = useState<string | null>(null);
-  const [isSupported, setIsSupported] = useState(true);
+  // const [isSupported, setIsSupported] = useState(false);
   const [lastSpokenText, setLastSpokenText] = useState<string>('');
   const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   
@@ -52,7 +52,7 @@ export default function VoiceRecorderRealtime({
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setIsSupported(false);
+      // setIsSupported(false);
       setError('Speech recognition not supported. Please use Chrome or Edge.');
     }
   }, []);

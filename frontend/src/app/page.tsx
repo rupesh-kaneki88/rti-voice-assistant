@@ -5,7 +5,7 @@ import VoiceRecorderRealtime from '@/components/VoiceRecorderRealtime';
 import RTIForm from '@/components/RTIForm';
 import LanguageSelector from '@/components/LanguageSelector';
 import ConversationView, { ConversationMessage } from '@/components/ConversationView';
-import { createSession, getForm } from '@/lib/api';
+import { createSession, getForm } from '@/client-lib/api';
 import { useTranslation } from '@/hooks/useTranslation';
 
 // Define FormData type to be shared
@@ -167,6 +167,11 @@ export default function Home() {
       <footer className="bg-neutral-800 text-neutral-300 mt-12">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 text-center text-sm">
           <p>{t('footer.copyright', { year: new Date().getFullYear() })}</p>
+          <p className="mt-2">
+            {t('footer.developed_by', { name: '' })}
+            <a href="https://www.linkedin.com/in/rupesh-chavan-926409154" target='blank' className="underline hover:text-white">Rupesh Chavan</a>
+          </p>
+          <p className="mt-1">{t('footer.initiative')}</p>
         </div>
       </footer>
     </div>

@@ -5,6 +5,7 @@ An AI-powered, accessibility-first voice assistant that enables persons with vis
 ## Features
 
 - 🗣️ **Dual-Mode RTI Expert**: Acts as both a knowledgeable guide for RTI questions (`Knowledge Mode`) and an efficient assistant for filing applications (`Form-Filling Mode`).
+- 🗣️ **Enhanced Voice Controls**: Stop agent speech, repeat the last message, and adjust speech speed for a personalized and accessible experience.
 - 🧠 **Smart Conversational Flow**:
     - **Initial Choice**: Starts by asking your goal—get information or file an application.
     - **Seamless Mode Switching**: Just say "let's file an application" to instantly switch from asking questions to filling the form, carrying over the context of your conversation.
@@ -54,7 +55,7 @@ We pivoted to a hybrid model that leverages third-party services with excellent 
 
 1.  **Groq for Unmatched Speed**: For English, our primary LLM is **Groq**, running LLaMA 3.1. It is incredibly fast (often >500 tokens/sec), providing the near-instant responses needed for a fluid conversation.
 
-2.  **Gemini for Superior Multilingual Support**: For **Hindi and Kannada**, we use **Google's Gemini 1.5 Flash**. It has exceptional multilingual capabilities and provides high-quality, nuanced responses in these languages.
+2.  **Gemini for Superior Multilingual Support**: For **Hindi and Kannada**, we use **Google's Gemini 2.5 Flash**. It has exceptional multilingual capabilities and provides high-quality, nuanced responses in these languages.
 
 3.  **gTTS for Kannada Voice**: To solve the TTS problem, we integrated the `gTTS` (Google Text-to-Speech) library, which provides a clear and natural-sounding voice for Kannada, ensuring a first-class experience for Kannada-speaking users.
 
@@ -97,8 +98,8 @@ cd rti-voice-assistant
 Create a `.env` file in the `backend` directory and add your API keys:
 ```bash
 # backend/.env
-GROQ_API_KEY=gsk_your_key_here
-GEMINI_API_KEY=AIza_your_key_here
+GROQ_API_KEY=<your-api-key>
+GEMINI_API_KEY=<your-api-key>
 ```
 
 ### 3. Install Dependencies & Run

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { transcribeAudio, textToSpeech } from '@/lib/api';
+import { transcribeAudio, textToSpeech } from '@/client-lib/api';
 
 // SVG Icon Components
 const MicIcon = () => (

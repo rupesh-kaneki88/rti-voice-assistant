@@ -125,3 +125,9 @@ This script runs a full conversation flow and verifies form updates.
 3.  Select a language and speak a request.
 4.  Converse with the agent until the form is complete.
 5.  Verify that the form auto-fills correctly.
+
+### Frontend Voice Controls
+The frontend now includes enhanced controls for a more accessible voice interaction:
+-   **Stop Speaking:** During the agent's response, you can click the main voice button again to immediately stop the agent from speaking.
+-   **Repeat Last Message:** After the agent has finished speaking, a "Repeat" button (or similar UI element) will appear. Click it to hear the agent's last message again.
+-   **Toggle Speech Speed:** A "Speed" button (or similar UI element) allows you to cycle through different speech speeds (e.g., normal, slow, slower) for the agent's responses. This helps users who prefer a slower pace.

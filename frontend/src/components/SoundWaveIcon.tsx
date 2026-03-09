@@ -19,7 +19,7 @@ const SoundWaveIcon: React.FC<SoundWaveIconProps> = ({ state }) => {
 
   if (state === 'speaking') {
     return (
-      <div className="flex items-center justify-center space-x-1">
+      <div className="flex items-center opacity-30 justify-center space-x-1">
         <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.1s]"></div>
         <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.2s]"></div>
         <div className="w-1 h-10 bg-gray-100 animate-wave [animation-delay:0.3s]"></div>

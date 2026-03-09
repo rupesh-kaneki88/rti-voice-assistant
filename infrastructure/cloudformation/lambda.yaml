@@ -1,0 +1,102 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RTI Voice Assistant - Lambda Function for FastAPI Backend'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+  ApiRootPath:
+    Type: String
+    Default: ""
+    Description: Base path for the API Gateway stage (e.g., /dev)
+
+  
+
+  LambdaExecutionRoleArn:
+    Type: String
+    Description: ARN of the IAM role for Lambda execution
+
+  SessionsTableName:
+    Type: String
+    Description: Name of the DynamoDB table for sessions
+
+  DocumentsBucketName:
+    Type: String
+    Description: Name of the S3 bucket for documents
+
+  KnowledgeBaseBucketName:
+    Type: String
+    Description: Name of the S3 bucket for knowledge base
+
+  KMSKeyId:
+    Type: String
+    Description: KMS Key ID for encryption
+
+  GroqApiKey:
+    Type: String
+    NoEcho: true
+    Description: API Key for Groq LLM
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: API Key for Gemini LLM
+
+  AwsRegion:
+    Type: String
+    Description: AWS Region where resources are deployed
+
+Resources:
+  # Lambda Function for FastAPI Backend
+  FastApiLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'rti-voice-assistant-backend-${Environment}'
+      PackageType: Image
+      Code:
+        ImageUri: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/rti-voice-assistant-backend-${Environment}:latest'
+      MemorySize: 1024 # Increased for potential cold start issues
+      Timeout: 60 # Increased for potential cold start issues
+      Role: !Ref LambdaExecutionRoleArn
+      Environment:
+        Variables:
+          API_ROOT_PATH: !Ref ApiRootPath # Pass API Gateway stage as root path
+          DYNAMODB_TABLE_NAME: !Ref SessionsTableName
+          S3_DOCUMENTS_BUCKET: !Ref DocumentsBucketName
+          S3_KNOWLEDGE_BASE_BUCKET: !Ref KnowledgeBaseBucketName
+          KMS_KEY_ID: !Ref KMSKeyId
+          GROQ_API_KEY: !Ref GroqApiKey
+          GEMINI_API_KEY: !Ref GeminiApiKey
+          USE_MOCK_SERVICES: "false" # Ensure real services are used
+          SESSION_TTL_HOURS: "24" # Default TTL
+          POLLY_VOICE_ENGLISH: "Joanna" # Default Polly voice
+          POLLY_VOICE_HINDI: "Aditi" # Default Polly voice
+          POLLY_OUTPUT_FORMAT: "mp3" # Default Polly output format
+          GEMINI_MODEL: "gemini-2.5-flash-lite" # User-specified Gemini model
+          GROQ_MODEL: "llama-3.1-8b-instant" # User-specified Groq model
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Application
+          Value: RTI-Voice-Assistant
+      TracingConfig:
+        Mode: Active # Enable X-Ray tracing
+
+Outputs:
+  FastApiLambdaFunctionArn:
+    Description: ARN of the FastAPI Lambda Function
+    Value: !GetAtt FastApiLambdaFunction.Arn
+    Export:
+      Name: !Sub 'RTI-Voice-Assistant-${Environment}-FastApiLambdaFunctionArn'
+  
+  FastApiLambdaFunctionName:
+    Description: Name of the FastAPI Lambda Function
+    Value: !Ref FastApiLambdaFunction
+    Export:
+      Name: !Sub 'RTI-Voice-Assistant-${Environment}-FastApiLambdaFunctionName'

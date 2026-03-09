@@ -1,253 +1,161 @@
-# RTI Voice Assistant - Deployment Guide
+# RTI Voice Assistant - Updated Deployment Guide
+
+This guide provides the most up-to-date instructions for deploying the RTI Voice Assistant backend and frontend to AWS. It incorporates all the fixes and best practices identified during the development process.
 
 ## Prerequisites
 
-1. **AWS Account** with appropriate credits
-2. **AWS CLI** installed and configured
-   ```bash
-   aws configure
-   ```
-3. **Node.js 18+** and npm
-4. **Python 3.11+**
-5. **Docker** (for Lambda container images)
-6. **AWS SAM CLI** (optional, for local testing)
+1.  **AWS Account** with appropriate permissions.
+2.  **AWS CLI** installed and configured.
+    ```bash
+    aws configure
+    ```
+3.  **Node.js 18+** and npm (for frontend development).
+4.  **Python 3.11+** (for backend development and Lambda layer creation).
+5.  **Git** installed.
+6.  **`zip` utility**: Ensure `zip` is available in your shell environment (e.g., Git Bash on Windows, or a Linux environment). If not, the script will provide instructions for manual zipping.
+7.  **Environment Variables**: Ensure `GROQ_API_KEY` and `GEMINI_API_KEY` are set in your shell environment.
 
-## Step 1: Deploy AWS Infrastructure
+## Step 1: Deploy Backend Infrastructure and API
 
-### Using CloudFormation
+This step deploys the entire backend, including Lambda functions, API Gateway, DynamoDB tables, S3 buckets, and IAM roles, using CloudFormation.
 
-```bash
-cd infrastructure/cloudformation
-chmod +x deploy.sh
-./deploy.sh dev  # or staging, prod
-```
+1.  **Navigate to the `infrastructure/cloudformation` directory**:
+    ```bash
+    cd infrastructure/cloudformation
+    ```
 
-This will create:
-- DynamoDB tables (sessions, consent) with TTL
-- S3 buckets (documents, knowledge base) with lifecycle policies
-- IAM roles for Lambda execution
-- KMS encryption key
-- API Gateway REST API
-- CloudWatch Log Groups
+2.  **Make the deployment script executable**:
+    ```bash
+    chmod +x deploy.sh
+    ```
 
-### Verify Deployment
+3.  **Run the deployment script**:
+    This script will:
+    *   Create a Lambda layer with all Python dependencies.
+    *   Create a deployment package for your backend application code.
+    *   Upload both the layer and the application package to your specified S3 bucket.
+    *   Deploy the main CloudFormation stack (`rti-voice-assistant`).
+    *   Deploy the API routes CloudFormation stack (`rti-voice-assistant-api-routes`).
+    *   Output the final API endpoint.
 
-```bash
-aws cloudformation describe-stacks --stack-name rti-voice-assistant --region us-east-1
-```
+    You need to provide an `environment` (e.g., `dev`), an S3 `deployment-bucket-name` (where deployment artifacts will be stored), and a `deployment-bucket-key` (the filename for your application's zip package, e.g., `deployment_package.zip`).
 
-## Step 2: Configure Environment Variables
+    ```bash
+    ./deploy.sh dev your-s3-deployment-bucket-name deployment_package.zip
+    ```
+    *Replace `your-s3-deployment-bucket-name` with an S3 bucket you own and have write access to. This bucket will be created if it doesn't exist.*
 
-1. Copy the example environment file:
-   ```bash
-   cp .env.example .env
-   ```
+    **Important Notes during script execution:**
+    *   If the `zip` command is not found, the script will pause and instruct you to manually create the zip files and upload them to S3. Follow the on-screen instructions carefully.
+    *   If the CloudFormation stack gets stuck in a `UPDATE_FAILED` state (e.g., due to previous debugging attempts), you might need to delete the stack first:
+        ```bash
+        aws cloudformation delete-stack --stack-name rti-voice-assistant
+        ```
+        Wait for the deletion to complete before re-running the `./deploy.sh` script.
 
-2. Update `.env` with values from CloudFormation outputs:
-   ```bash
-   aws cloudformation describe-stacks \
-     --stack-name rti-voice-assistant \
-     --query 'Stacks[0].Outputs' \
-     --output table
-   ```
+4.  **Verify Backend Deployment**:
+    The script will output the API Endpoint. You can also check the status of your CloudFormation stacks in the AWS Console.
+    *   `rti-voice-assistant` (main infrastructure)
+    *   `rti-voice-assistant-api-routes` (API Gateway routes)
 
-3. Fill in the following values:
-   - `DYNAMODB_SESSIONS_TABLE`
-   - `DYNAMODB_CONSENT_TABLE`
-   - `S3_DOCUMENTS_BUCKET`
-   - `S3_KNOWLEDGE_BASE_BUCKET`
-   - `AWS_ACCOUNT_ID`
+## Step 2: Configure Frontend API Endpoint
 
-## Step 3: Deploy Backend Lambda Functions
+Now that your backend is deployed, you need to update your frontend application to point to the new API endpoint.
 
-### Prepare Lambda Layers
+1.  **Update `.env.example`**:
+    The `NEXT_PUBLIC_API_URL` in your `.env.example` file should be updated with the API Endpoint URL obtained from the backend deployment (output by the `deploy.sh` script).
 
-```bash
-cd backend
-pip install -r requirements.txt -t ./layer/python
-cd layer
-zip -r ../lambda-layer.zip .
-cd ..
-```
+    *Example `NEXT_PUBLIC_API_URL` entry in `.env.example`:*
+    ```
+    NEXT_PUBLIC_API_URL=api_endpoint # Deployed backend API endpoint
+    ```
 
-### Deploy Individual Services
+2.  **Update `.env` (if it exists)**:
+    If you have a `.env` file in your project root, ensure its `NEXT_PUBLIC_API_URL` is also updated to the correct API endpoint. If you don't have a `.env` file, create one by copying `.env.example` and ensure `NEXT_PUBLIC_API_URL` is set.
 
-Each Lambda function will be deployed separately in subsequent tasks:
+3.  **Rename Frontend `lib` directory**:
+    To avoid conflicts with Python `lib/` directories that are typically git-ignored, rename your frontend's `lib` directory.
+    *   Navigate to `frontend/src/`.
+    *   Rename the `lib` folder to `client-lib` (or a similar descriptive name).
+        ```bash
+        mv frontend/src/lib frontend/src/client-lib
+        ```
+    *   Update all import statements in your frontend code that refer to `@/lib/api` (or similar) to `@/client-lib/api`. You will need to search and replace these imports throughout your frontend codebase.
 
-1. **Voice Service** (Task 2)
-2. **Legal Service** (Task 7)
-3. **Form Service** (Task 6)
-4. **Session Service** (Task 5)
-5. **Privacy Service** (Task 9)
+## Step 3: Deploy Frontend to AWS Amplify
 
-## Step 4: Upload Knowledge Base Content
+AWS Amplify is recommended for deploying your Next.js frontend due to its ease of use and integrated CI/CD.
 
-Upload RTI rights and procedures to S3:
+1.  **Commit your changes**:
+    Ensure all changes (updated `.env.example`, `.env`, renamed `client-lib` folder, and updated import statements) are committed and pushed to your Git repository.
 
-```bash
-aws s3 cp docs/rti-knowledge-base/ \
-  s3://YOUR-KNOWLEDGE-BASE-BUCKET/ \
-  --recursive
-```
+2.  **Access the AWS Amplify Console**:
+    *   Go to the [AWS Amplify Console](https://console.aws.amazon.com/amplify/home).
+    *   Click on "New app" → "Host web app".
 
-## Step 5: Deploy Frontend to AWS Amplify
+3.  **Connect Your Repository**:
+    *   Choose your Git provider (e.g., GitHub, GitLab, Bitbucket, AWS CodeCommit).
+    *   Follow the authorization steps.
+    *   Select your repository and the branch you want to deploy.
+    *   Click "Next".
 
-### Option A: Using Amplify Console (Recommended)
+4.  **Configure Build Settings**:
+    *   **App name**: Give your application a name (e.g., `rti-voice-assistant-frontend`).
+    *   **App root / Base directory**: Set this to `frontend/`. This tells Amplify where your Next.js application's code is located within your monorepo.
+    *   **Build settings**: Amplify usually auto-detects Next.js. Review the generated `amplify.yml` file. It should look similar to this:
+        ```yaml
+        version: 1
+        frontend:
+          phases:
+            preBuild:
+              commands:
+                - npm ci
+            build:
+              commands:
+                - npm run build
+          artifacts:
+            baseDirectory: .next
+            files:
+              - '**/*'
+          cache:
+            paths:
+              - node_modules/**/*
+        ```
+        *Note: The `baseDirectory` here refers to the output of the `npm run build` command relative to the `App root` (`frontend/`).*
+    *   **Environment variables**:
+        *   Click on "Add environment variables".
+        *   Add `NEXT_PUBLIC_API_URL` and paste the API endpoint: `api_end_point`.
+        *   Add any other `NEXT_PUBLIC_` variables from your `.env` file that the frontend needs.
+    *   Click "Next".
 
-1. Go to AWS Amplify Console
-2. Click "New app" → "Host web app"
-3. Connect your Git repository
-4. Configure build settings:
-   ```yaml
-   version: 1
-   frontend:
-     phases:
-       preBuild:
-         commands:
-           - cd frontend
-           - npm ci
-       build:
-         commands:
-           - npm run build
-     artifacts:
-       baseDirectory: frontend/.next
-       files:
-         - '**/*'
-     cache:
-       paths:
-         - frontend/node_modules/**/*
-   ```
-5. Add environment variables in Amplify Console
-6. Deploy
+5.  **Review and Deploy**:
+    *   Review all the settings.
+    *   Click "Save and deploy".
 
-### Option B: Manual Deployment
+6.  **Monitor Deployment**:
+    *   Monitor the deployment progress in the Amplify Console.
 
-```bash
-cd frontend
-npm install
-npm run build
-
-# Deploy to S3 + CloudFront (manual setup required)
-aws s3 sync .next/static s3://your-frontend-bucket/static
-```
-
-## Step 6: Configure API Gateway
-
-### Add Lambda Integrations
-
-For each Lambda function, create API Gateway integration:
-
-```bash
-# Example for voice service
-aws apigateway put-integration \
-  --rest-api-id YOUR_API_ID \
-  --resource-id YOUR_RESOURCE_ID \
-  --http-method POST \
-  --type AWS_PROXY \
-  --integration-http-method POST \
-  --uri arn:aws:apigateway:REGION:lambda:path/2015-03-31/functions/LAMBDA_ARN/invocations
-```
-
-### Deploy API Stage
-
-```bash
-aws apigateway create-deployment \
-  --rest-api-id YOUR_API_ID \
-  --stage-name dev
-```
-
-## Step 7: Enable CloudWatch Monitoring
-
-### Create CloudWatch Dashboard
-
-```bash
-aws cloudwatch put-dashboard \
-  --dashboard-name rti-voice-assistant \
-  --dashboard-body file://infrastructure/cloudwatch-dashboard.json
-```
-
-### Set Up Alarms
-
-```bash
-# Lambda error alarm
-aws cloudwatch put-metric-alarm \
-  --alarm-name rti-lambda-errors \
-  --alarm-description "Alert on Lambda errors" \
-  --metric-name Errors \
-  --namespace AWS/Lambda \
-  --statistic Sum \
-  --period 300 \
-  --threshold 5 \
-  --comparison-operator GreaterThanThreshold
-```
-
-## Step 8: Test the Deployment
-
-### Test Backend APIs
-
-```bash
-# Test session creation
-curl -X POST https://YOUR_API_URL/session/create \
-  -H "Content-Type: application/json" \
-  -d '{"language": "en"}'
-
-# Test health check
-curl https://YOUR_API_URL/health
-```
-
-### Test Frontend
-
-1. Navigate to Amplify URL
-2. Test voice recording
-3. Test form submission
-4. Verify accessibility with screen reader
-
-## Step 9: Set Up Cost Monitoring
-
-```bash
-# Create budget alert
-aws budgets create-budget \
-  --account-id YOUR_ACCOUNT_ID \
-  --budget file://infrastructure/budget.json
-```
+7.  **Verify Your Deployed Frontend**:
+    *   Once deployed, Amplify will provide a URL for your hosted frontend application. Open this URL in your browser to verify that your frontend is working and connecting to the backend API.
 
 ## Troubleshooting
 
-### Lambda Cold Starts
-
-If IndicWhisper Lambda has slow cold starts:
-```bash
-# Enable provisioned concurrency
-aws lambda put-provisioned-concurrency-config \
-  --function-name voice-service \
-  --provisioned-concurrent-executions 1 \
-  --qualifier LATEST
-```
-
-### DynamoDB Throttling
-
-If you see throttling errors:
-```bash
-# Switch to on-demand billing
-aws dynamodb update-table \
-  --table-name rti-sessions-dev \
-  --billing-mode PAY_PER_REQUEST
-```
-
-### S3 Lifecycle Not Working
-
-Verify lifecycle policy:
-```bash
-aws s3api get-bucket-lifecycle-configuration \
-  --bucket YOUR_DOCUMENTS_BUCKET
-```
+*   **Lambda Layer Size**: If you encounter errors related to Lambda layer size, ensure `boto3` and `botocore` are removed from `backend/requirements.txt` as they are included in the Lambda runtime.
+*   **CloudFormation Template Errors**: If you get `Template format error` messages, double-check all `Default` values for parameters are strings (e.g., `"24"` instead of `24`) and that numeric keys in YAML are quoted (e.g., `"200":`).
+*   **Duplicate Export Names**: Ensure that CloudFormation output export names are unique across all your stacks.
+*   **Reserved Lambda Environment Variables**: Do not set reserved Lambda environment variables like `AWS_REGION` manually.
+*   **Incorrect Deployment Package Structure**: Ensure your `deployment_package.zip` contains the application files (e.g., `app.py`, `lambda_function.py`) at its root, not nested inside a `backend` folder.
+*   **Frontend Module Not Found**: If frontend build fails with `Module not found`, ensure all necessary frontend code is committed to your Git repository and not ignored by `.gitignore`. If you rename a folder (e.g., `lib` to `client-lib`), update all import paths accordingly.
+*   **Shell Quoting Issues**: When passing parameters to AWS CLI commands, especially those with special characters (like ARNs), always enclose the values in double quotes (e.g., `FastApiLambdaFunctionArn="arn:aws:lambda:..."`).
 
 ## Rollback
 
-To rollback infrastructure:
+To delete the entire backend infrastructure deployed via CloudFormation:
 ```bash
 aws cloudformation delete-stack --stack-name rti-voice-assistant
+aws cloudformation delete-stack --stack-name rti-voice-assistant-api-routes
 ```
+To delete the Amplify frontend application, use the AWS Amplify Console.
 
 ## Production Checklist
 

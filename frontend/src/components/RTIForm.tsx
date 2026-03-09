@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { updateForm, generateDocument, getRTIGuidance } from '@/lib/api';
+import { updateForm, generateDocument, getRTIGuidance } from '@/client-lib/api';
 import { FormData } from '@/app/page'; // Import the shared FormData type
 
 // SVG Icon Components (assuming they are defined above as before)

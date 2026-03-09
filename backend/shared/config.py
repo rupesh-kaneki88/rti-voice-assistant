@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     
     # Use mock services for local development
     use_mock_services: bool = os.getenv('USE_MOCK_SERVICES', 'false').lower() == 'true'
+
+    # FastAPI Root Path (for API Gateway stages)
+    api_root_path: str = os.getenv('API_ROOT_PATH', '')
     
     class Config:
         env_file = '.env'

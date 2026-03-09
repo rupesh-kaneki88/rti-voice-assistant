@@ -1,0 +1,35 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'RTI Voice Assistant - Lambda Layer for Dependencies'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+  
+  DeploymentBucketName:
+    Type: String
+    Description: S3 bucket name where the Lambda layer package is stored
+
+  LayerPackageKey:
+    Type: String
+    Description: S3 key (path) to the Lambda layer zip file
+
+Resources:
+  DependenciesLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub 'rti-voice-assistant-dependencies-${Environment}'
+      Description: 'Dependencies for the RTI Voice Assistant backend'
+      Content:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Ref LayerPackageKey
+      CompatibleRuntimes:
+        - python3.11
+      LicenseInfo: 'Available under the MIT-0 license.'
+
+Outputs:
+  DependenciesLambdaLayerArn:
+    Description: ARN of the Dependencies Lambda Layer
+    Value: !Ref DependenciesLambdaLayer
+    Export:
+      Name: !Sub '${AWS::StackName}-DependenciesLambdaLayerArn'

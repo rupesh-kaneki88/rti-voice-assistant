@@ -10,7 +10,9 @@
     "message": "Initializing your secure session..."
   },
   "footer": {
-    "copyright": "© {year} RTI Voice Assistant. An initiative for a more accessible India."
+    "copyright": "© {year} RTI Voice Assistant. An initiative for a more accessible India.",
+    "developed_by": "Developed by {name}",
+    "initiative": "under the AI for Bharat initiative by AWS"
   },
   "welcome": {
     "title": "Welcome to the RTI Voice Assistant",
@@ -22,7 +24,10 @@
     "listening": "Listening...",
     "thinking": "Thinking...",
     "speaking": "Speaking...",
-    "error": "An error occurred."
+    "error": "An error occurred.",
+    "instruction_speak": "Click the button to speak",
+    "instruction_stop_listening": "Click the button to stop",
+    "instruction_stop_speaking": "Click the button to stop"
   },
   "button": {
     "wakeUp": "Wake Up Agent"

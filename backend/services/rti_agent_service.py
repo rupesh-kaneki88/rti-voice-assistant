@@ -132,7 +132,7 @@ class RTIAgentService:
         
         try:
             agent_message = self._generate_with_llm_with_fallback(
-                primary_provider, fallback_provider, user_message, conversation_history, system_prompt, 400, 0.7
+                primary_provider, fallback_provider, user_message, conversation_history, system_prompt, 1000, 0.7
             )
 
             # Check for mode switch command

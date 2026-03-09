@@ -15,8 +15,15 @@ if ! aws sts get-caller-identity &> /dev/null; then
 fi
 
 # Install dependencies
-echo "Installing Python dependencies..."
-pip install -r requirements.txt -t ./package
+echo "Installing Python dependencies for Lambda (Linux)..."
+pip install \
+    --platform manylinux2014_x86_64 \
+    --implementation cp \
+    --python-version 3.9 \
+    --only-binary=:all: \
+    --upgrade \
+    -r requirements.txt \
+    -t ./package
 
 # Copy shared modules
 echo "Copying shared modules..."

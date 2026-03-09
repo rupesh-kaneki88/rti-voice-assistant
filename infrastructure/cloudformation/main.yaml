@@ -13,8 +13,27 @@ Parameters:
   
   SessionTTLHours:
     Type: Number
-    Default: 24
+    Default: "24"
     Description: Session TTL in hours for DPDPA compliance
+
+  ApiRootPath:
+    Type: String
+    Default: ""
+    Description: Base path for the API Gateway stage (e.g., /dev)
+
+  
+
+  GroqApiKey:
+    Type: String
+    NoEcho: true
+    Description: API Key for Groq LLM
+
+  GeminiApiKey:
+    Type: String
+    NoEcho: true
+    Description: API Key for Gemini LLM
+
+  
 
 Resources:
   # DynamoDB Table for Sessions
@@ -177,6 +196,7 @@ Resources:
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
         - 'arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess'
+        - 'arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly'
       Policies:
         - PolicyName: DynamoDBAccess
           PolicyDocument:
@@ -214,7 +234,7 @@ Resources:
                 Action:
                   - 'bedrock:InvokeModel'
                   - 'bedrock:InvokeModelWithResponseStream'
-                Resource: '*'
+                Resource: '*' # Or specify the ARN of the models you want to use
         - PolicyName: PollyAccess
           PolicyDocument:
             Version: '2012-10-17'
@@ -222,6 +242,15 @@ Resources:
               - Effect: Allow
                 Action:
                   - 'polly:SynthesizeSpeech'
+                Resource: '*'
+        - PolicyName: TranscribeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'transcribe:StartStreamTranscription'
+                  - 'transcribe:StartMedicalStreamTranscription'
                 Resource: '*'
         - PolicyName: KMSAccess
           PolicyDocument:
@@ -284,6 +313,24 @@ Resources:
         Environment: !Ref Environment
         Application: RTI-Voice-Assistant
 
+  FastApiLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: lambda.yaml # Assuming lambda.yaml is in the same directory
+      Parameters:
+        Environment: !Ref Environment
+        LambdaExecutionRoleArn: !GetAtt LambdaExecutionRole.Arn
+        SessionsTableName: !Ref SessionsTable
+        DocumentsBucketName: !Ref DocumentsBucket
+        KnowledgeBaseBucketName: !Ref KnowledgeBaseBucket
+        KMSKeyId: !Ref EncryptionKey
+        GroqApiKey: !Ref GroqApiKey
+        GeminiApiKey: !Ref GeminiApiKey
+        AwsRegion: !Ref AWS::Region
+        ApiRootPath: !Ref ApiRootPath
+
+  
+
 Outputs:
   SessionsTableName:
     Description: DynamoDB Sessions Table Name
@@ -338,3 +385,7 @@ Outputs:
     Value: !GetAtt HttpApi.ApiEndpoint
     Export:
       Name: !Sub '${AWS::StackName}-HttpApiEndpoint'
+
+  FastApiLambdaFunctionArn:
+    Description: ARN of the FastAPI Lambda Function
+    Value: !GetAtt FastApiLambdaStack.Outputs.FastApiLambdaFunctionArn

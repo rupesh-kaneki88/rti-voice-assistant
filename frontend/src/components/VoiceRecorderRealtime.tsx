@@ -1,23 +1,22 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { textToSpeech, haveConversation } from '@/lib/api';
+import { textToSpeech, haveConversation } from '@/client-lib/api';
 import { FormData } from '@/app/page';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Mic, Square, Bot, BrainCircuit, Loader, Volume2 } from 'lucide-react';
-import SoundWaveIcon from './SoundWaveIcon'; // Import the new component
+import { Mic, Bot, StopCircle, RefreshCw, Gauge } from 'lucide-react';
+import SoundWaveIcon from './SoundWaveIcon';
 
 interface VoiceRecorderProps {
   sessionId: string;
   language: 'en' | 'hi' | 'kn';
   onFormUpdate: (updates: Partial<FormData> & { mode?: string }) => void;
-  // conversationHistory: ConversationMessage[]; // Removed
-  // setConversationHistory: React.Dispatch<React.SetStateAction<ConversationMessage[]>>; // Removed
   setMode: React.Dispatch<React.SetStateAction<string>>;
-  onNewMessage: (message: { role: 'user' | 'agent'; content: string }) => void; // New prop for sending messages up
+  onNewMessage: (message: { role: 'user' | 'agent'; content: string }) => void;
 }
 
 type AgentState = 'uninitialized' | 'idle' | 'listening' | 'thinking' | 'speaking' | 'error';
+type PlaybackSpeed = 1 | 1.5 | 2;
 
 declare global {
   interface Window {
@@ -32,15 +31,23 @@ export default function VoiceRecorderRealtime({
   const [agentState, setAgentState] = useState<AgentState>('uninitialized');
   const [error, setError] = useState<string | null>(null);
   const [isSupported, setIsSupported] = useState(true);
+  const [lastSpokenText, setLastSpokenText] = useState<string>('');
+  const [playbackSpeed, setPlaybackSpeed] = useState<PlaybackSpeed>(1);
   
   const { t } = useTranslation(language);
   const recognitionRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const agentStateRef = useRef<AgentState>(agentState); // For onend callback
+  const agentStateRef = useRef<AgentState>(agentState);
 
   useEffect(() => {
-    agentStateRef.current = agentState; // Keep ref updated
+    agentStateRef.current = agentState;
   }, [agentState]);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackSpeed;
+    }
+  }, [playbackSpeed]);
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -51,7 +58,6 @@ export default function VoiceRecorderRealtime({
   }, []);
 
   useEffect(() => {
-    // Stop any ongoing processes if the session ID changes
     return () => {
       if (recognitionRef.current) recognitionRef.current.abort();
       if (audioRef.current) audioRef.current.pause();
@@ -65,9 +71,8 @@ export default function VoiceRecorderRealtime({
       setError(null);
       const response = await haveConversation(sessionId, '', language);
       const greeting = response.agent_response;
-      onNewMessage({ role: 'agent', content: greeting }); // Send message up
+      onNewMessage({ role: 'agent', content: greeting });
       setMode('conversation');
-      
       await speakText(greeting);
     } catch (err) {
       console.error('Wake up error:', err);
@@ -78,15 +83,12 @@ export default function VoiceRecorderRealtime({
   };
 
   const startListening = () => {
-    if (agentState !== 'idle') return; // Only listen if idle
-
+    if (agentState !== 'idle') return;
     try {
       setError(null);
       setAgentState('listening');
-      
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       const recognition = new SpeechRecognition();
-      
       const languageMap: { [key: string]: string } = { 'en': 'en-IN', 'hi': 'hi-IN', 'kn': 'kn-IN' };
       recognition.lang = languageMap[language] || 'hi-IN';
       recognition.continuous = false;
@@ -111,14 +113,13 @@ export default function VoiceRecorderRealtime({
       };
 
       recognition.onend = () => {
-        if (agentStateRef.current === 'listening') { // Use ref for up-to-date state
+        if (agentStateRef.current === 'listening') {
           setAgentState('idle');
         }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
-      
     } catch (err) {
       console.error('Recognition start error:', err);
       setError('Failed to start speech recognition.');
@@ -130,22 +131,17 @@ export default function VoiceRecorderRealtime({
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
-    // setAgentState('idle'); // Removed to fix TypeScript error
   };
 
   const processTranscription = async (text: string) => {
     try {
       setAgentState('thinking');
-      onNewMessage({ role: 'user', content: text }); // Send message up
-      
+      onNewMessage({ role: 'user', content: text });
       const response = await haveConversation(sessionId, text, language);
       const { agent_response, form_updates, mode } = response;
-      
-      onNewMessage({ role: 'agent', content: agent_response }); // Send message up
+      onNewMessage({ role: 'agent', content: agent_response });
       onFormUpdate({ ...form_updates, mode });
-      
       await speakText(agent_response);
-      
     } catch (err) {
       console.error('Processing error:', err);
       setError('Failed to process speech. Please try again.');
@@ -154,11 +150,25 @@ export default function VoiceRecorderRealtime({
     }
   };
 
-  const speakText = async (text: string) => {
+  const stopSpeaking = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setAgentState('idle');
+  };
+
+  const speakText = async (textToSpeak: string) => {
+    if (audioRef.current) {
+      stopSpeaking();
+    }
+    if (!textToSpeak) return;
+    setLastSpokenText(textToSpeak);
     setAgentState('speaking');
     try {
-      const audioData = await textToSpeech(text, language);
+      const audioData = await textToSpeech(textToSpeak, language);
       const audio = new Audio(`data:audio/mp3;base64,${audioData.audio}`);
+      audio.playbackRate = playbackSpeed;
       audioRef.current = audio;
       
       await new Promise<void>((resolve, reject) => {
@@ -181,8 +191,18 @@ export default function VoiceRecorderRealtime({
     }
   };
 
-  const isDisabled = agentState === 'thinking' || agentState === 'speaking' || !isSupported;
-  const isListening = agentState === 'listening';
+  const handleRepeat = () => {
+    if (lastSpokenText) {
+      speakText(lastSpokenText);
+    }
+  };
+
+  const toggleSpeed = () => {
+    const speeds: PlaybackSpeed[] = [1, 1.5, 2];
+    const currentIndex = speeds.indexOf(playbackSpeed);
+    const nextIndex = (currentIndex + 1) % speeds.length;
+    setPlaybackSpeed(speeds[nextIndex]);
+  };
 
   const getButtonContent = () => {
     switch (agentState) {
@@ -208,48 +228,69 @@ export default function VoiceRecorderRealtime({
     }
   };
 
-  const buttonClass = `
-    flex items-center justify-center w-24 h-24 rounded-full text-white font-bold
-    transition-all duration-300 ease-in-out transform focus:outline-none focus:ring-4 focus:ring-offset-2
-    disabled:opacity-60 disabled:cursor-not-allowed
-    ${!isDisabled && 'hover:scale-105'}
-    ${isListening ? 'bg-red-600 focus:ring-red-400' : 'bg-blue-600 focus:ring-blue-400'}
-    shadow-lg
-  `;
-
   const handleClick = () => {
     if (agentState === 'uninitialized') handleWakeUp();
     else if (agentState === 'idle') startListening();
     else if (agentState === 'listening') stopListening();
+    else if (agentState === 'speaking') stopSpeaking();
   };
 
-  if (!isSupported) {
-    return (
-      <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded">
-        <p className="font-bold">Speech Recognition Not Supported</p>
-        <p>Please use Google Chrome or Microsoft Edge for voice input.</p>
-      </div>
-    );
-  }
+  const buttonClass = `
+    flex items-center justify-center w-24 h-24 rounded-full text-white font-bold
+    transition-all duration-300 ease-in-out transform focus:outline-none focus:ring-4 focus:ring-offset-2
+    disabled:opacity-60 disabled:cursor-not-allowed
+    ${agentState !== 'thinking' && 'hover:scale-105'}
+    ${agentState === 'listening' || agentState === 'speaking' ? 'bg-red-600 focus:ring-red-400' : 'bg-blue-600 focus:ring-blue-400'}
+    shadow-lg
+  `;
+
+  const getInstructionText = () => {
+    switch (agentState) {
+      case 'listening':
+        return t('status.instruction_stop_listening');
+      case 'speaking':
+        return t('status.instruction_stop_speaking');
+      default:
+        return t('status.instruction_speak');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full items-center justify-center">
-      {/* Agent Status & Control */}
       <div className="flex-shrink-0 flex flex-col items-center justify-center gap-6">
-        <button
-          onClick={handleClick}
-          disabled={isDisabled}
-          className={buttonClass}
-          aria-label={isListening ? 'Stop listening' : 'Start listening'}
-        >
-          {getButtonContent()}
-        </button>
+        <div className="relative">
+          <button
+            onClick={handleClick}
+            disabled={agentState === 'thinking'}
+            className={buttonClass}
+            aria-label={agentState === 'listening' ? 'Stop listening' : agentState === 'speaking' ? 'Stop speaking' : 'Start listening'}
+          >
+            {getButtonContent()}
+            {agentState === 'speaking' && <StopCircle size={38} className="absolute opacity-90" />}
+          </button>
+        </div>
         <div className="text-center">
           <p className="font-semibold text-xl text-neutral-800">{getStatusText()}</p>
           <p className="text-neutral-500 text-md">
-            {isListening ? 'Click the button to stop' : 'Click the button to speak'}
+            {getInstructionText()}
           </p>
         </div>
+        
+        {/* Audio Controls */}
+        <div className="flex items-center justify-center gap-4 h-10">
+          {(agentState === 'speaking' || (agentState === 'idle' && lastSpokenText)) && (
+            <>
+              <button onClick={handleRepeat} className="p-2 rounded-full bg-neutral-200 hover:bg-neutral-300 transition-colors" title="Repeat">
+                <RefreshCw size={20} />
+              </button>
+              <button onClick={toggleSpeed} className="p-2 rounded-full bg-neutral-200 hover:bg-neutral-300 transition-colors flex items-center gap-1" title="Toggle speed">
+                <Gauge size={20} />
+                <span className="text-xs font-semibold">{playbackSpeed}x</span>
+              </button>
+            </>
+          )}
+        </div>
+
         {error && (
           <p role="alert" className="text-red-600 text-center text-sm mt-2">{error}</p>
         )}
